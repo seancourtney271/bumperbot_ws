@@ -1,0 +1,2 @@
+ros2 launch bumperbot_bringup simulated_robot.launch.py world_name:=small_house
+source install/setup.bash

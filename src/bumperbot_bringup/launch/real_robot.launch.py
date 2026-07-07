@@ -25,7 +25,7 @@ def generate_launch_description():
 
     laser_driver = Node(
             package="rplidar_ros",
-            executable="rplidar_node",
+            executable="rplidar_composition",
             name="rplidar_node",
             parameters=[os.path.join(
                 get_package_share_directory("bumperbot_bringup"),
@@ -80,6 +80,19 @@ def generate_launch_description():
         ),
         condition=IfCondition(use_slam)
     )
+
+    # --- FOXGLOVE BRIDGE SECTION ---
+    foxglove_bridge = Node(
+        package="foxglove_bridge",
+        executable="foxglove_bridge",
+        name="foxglove_bridge",
+        parameters=[{
+            "port": 8765,                  # Default WebSocket port for Foxglove Studio
+            "address": "0.0.0.0",         # Bind to all interfaces so external devices can connect
+            "send_buffer_limit": 10000000 # Buffer limit to prevent drops on high-bandwidth data like lasers/images
+        }],
+        output="screen"
+    )
     
     return LaunchDescription([
         use_slam_arg,
@@ -89,5 +102,6 @@ def generate_launch_description():
         joystick,
         imu_driver_node,
         localization,
-        slam
+        slam,
+        foxglove_bridge # Added here
     ])

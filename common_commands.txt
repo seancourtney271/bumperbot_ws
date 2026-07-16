@@ -1,2 +1,9 @@
 ros2 launch bumperbot_bringup simulated_robot.launch.py world_name:=small_house
 source install/setup.bash
+
+
+///Domain IDs
+export ROS_DOMAIN_ID=2
+
+///Real Robot Section
+ros2 launch bumperbot_bringup real_robot.launch.py use_slam:=true

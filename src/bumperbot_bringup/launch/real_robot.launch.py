@@ -63,13 +63,16 @@ def generate_launch_description():
         executable="mpu6050_driver.py"
     )
 
+    # localization = IncludeLaunchDescription(
+    #     os.path.join(
+    #         get_package_share_directory("bumperbot_localization"),
+    #         "launch",
+    #         "global_localization.launch.py"
+    #     ),
+    #     condition=UnlessCondition(use_slam)
+    # )
     localization = IncludeLaunchDescription(
-        os.path.join(
-            get_package_share_directory("bumperbot_localization"),
-            "launch",
-            "global_localization.launch.py"
-        ),
-        condition=UnlessCondition(use_slam)
+        os.path.join(get_package_share_directory("bumperbot_localization"), "launch", "local_localization.launch.py"),
     )
 
     slam = IncludeLaunchDescription(

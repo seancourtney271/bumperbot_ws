@@ -5,12 +5,17 @@ using namespace std::chrono_literals;
 
 rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub;
 
+// void imuCallback(const sensor_msgs::msg::Imu &imu)
+// {
+//   sensor_msgs::msg::Imu new_imu;
+//   new_imu = imu;
+//   new_imu.header.frame_id = "base_footprint_ekf";
+//   imu_pub->publish(new_imu);
+// }
+
 void imuCallback(const sensor_msgs::msg::Imu &imu)
 {
-  sensor_msgs::msg::Imu new_imu;
-  new_imu = imu;
-  new_imu.header.frame_id = "base_footprint_ekf";
-  imu_pub->publish(new_imu);
+  imu_pub->publish(imu);
 }
 
 

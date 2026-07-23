@@ -33,6 +33,13 @@ class MPU6050_Driver(Node):
         self.imu_pub_ = self.create_publisher(Imu, "/imu/out", qos_profile=qos_profile_sensor_data)
         self.imu_msg_ = Imu()
         self.imu_msg_.header.frame_id = "base_footprint"
+        # This driver does not compute orientation (no onboard sensor fusion),
+        # so the orientation field is left at its default (0,0,0,0), which is
+        # an invalid quaternion. Setting orientation_covariance[0] = -1 tells
+        # any consumer (e.g. robot_localization's EKF) to ignore the orientation
+        # field entirely and rely only on angular_velocity / linear_acceleration.
+        # See: https://docs.ros.org/en/api/sensor_msgs/html/msg/Imu.html
+        self.imu_msg_.orientation_covariance[0] = -1.0
         self.frequency_ = 0.01
         self.timer_ = self.create_timer(self.frequency_, self.timerCallback)
 
@@ -57,6 +64,10 @@ class MPU6050_Driver(Node):
             self.imu_msg_.linear_acceleration.z = acc_z / 1670.13
             self.imu_msg_.angular_velocity.x = gyro_x / 7509.55
             self.imu_msg_.angular_velocity.y = gyro_y / 7509.55
+            # NOTE: verify this sign matches REP 103 (positive = counterclockwise/left turn)
+            # by rotating the robot left by hand and checking `ros2 topic echo /imu/out`
+            # reports a positive angular_velocity.z. If it's negative, flip this to:
+            #   self.imu_msg_.angular_velocity.z = -(gyro_z / 7509.55)
             self.imu_msg_.angular_velocity.z = gyro_z / 7509.55
 
             self.imu_msg_.header.stamp = self.get_clock().now().to_msg()

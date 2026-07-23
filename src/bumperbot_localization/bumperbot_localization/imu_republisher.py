@@ -6,10 +6,13 @@ from sensor_msgs.msg import Imu
 
 imu_pub = None
 
+# def imuCallback(imu):
+#     global imu_pub
+#     imu.header.frame_id = "base_footprint_ekf"
+#     imu_pub.publish(imu)
 def imuCallback(imu):
     global imu_pub
-    imu.header.frame_id = "base_footprint_ekf"
-    imu_pub.publish(imu)
+    imu_pub.publish(imu)   # pass through unchanged — frame_id is already correct from the driver
 
 
 def main(args=None):

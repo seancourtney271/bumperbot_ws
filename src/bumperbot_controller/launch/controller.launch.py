@@ -129,7 +129,7 @@ def generate_launch_description():
         ]
     )
 
-    noisy_controller_launch = OpaqueFunction(function=noisy_controller)
+    noisy_controller_launch = OpaqueFunction(function=noisy_controller, condition=IfCondition(use_sim_time))
 
     return LaunchDescription(
         [

@@ -143,25 +143,45 @@ hardware_interface::return_type BumperbotInterface::read(const rclcpp::Time &,
   {
     auto dt = (rclcpp::Clock().now() - last_run_).seconds();
     std::string message;
-    arduino_.ReadLine(message);
-    std::stringstream ss(message);
-    std::string res;
-    int multiplier = 1;
-    while(std::getline(ss, res, ','))
+    try
     {
-      multiplier = res.at(1) == 'p' ? 1 : -1;
+      // Bound the wait for the rest of the line so a partial read can never stall the control loop.
+      arduino_.ReadLine(message, '\n', 5);
+    }
+    catch (const LibSerial::ReadTimeout &)
+    {
+      // Rest of the line hasn't arrived yet -- pick it up on the next read() call.
+      return hardware_interface::return_type::OK;
+    }
 
-      if(res.at(0) == 'r')
+    try
+    {
+      std::stringstream ss(message);
+      std::string res;
+      int multiplier = 1;
+      while(std::getline(ss, res, ','))
       {
-        velocity_states_.at(0) = multiplier * std::stod(res.substr(2, res.size()));
-        position_states_.at(0) += velocity_states_.at(0) * dt;
-      }
-      else if(res.at(0) == 'l')
-      {
-        velocity_states_.at(1) = multiplier * std::stod(res.substr(2, res.size()));
-        position_states_.at(1) += velocity_states_.at(1) * dt;
+        multiplier = res.at(1) == 'p' ? 1 : -1;
+
+        if(res.at(0) == 'r')
+        {
+          velocity_states_.at(0) = multiplier * std::stod(res.substr(2, res.size()));
+          position_states_.at(0) += velocity_states_.at(0) * dt;
+        }
+        else if(res.at(0) == 'l')
+        {
+          velocity_states_.at(1) = multiplier * std::stod(res.substr(2, res.size()));
+          position_states_.at(1) += velocity_states_.at(1) * dt;
+        }
       }
     }
+    catch (const std::exception &e)
+    {
+      RCLCPP_ERROR_STREAM(rclcpp::get_logger("BumperbotInterface"),
+                          "Discarding malformed serial message \"" << message << "\": " << e.what());
+      return hardware_interface::return_type::OK;
+    }
+
     last_run_ = rclcpp::Clock().now();
   }
   return hardware_interface::return_type::OK;

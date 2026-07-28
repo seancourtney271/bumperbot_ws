@@ -203,11 +203,11 @@ void rightEncoderCallback()
 {
   if(digitalRead(right_encoder_phaseB) == HIGH)
   {
-    right_wheel_sign = "p";
+    right_wheel_sign = "n";
   }
   else
   {
-    right_wheel_sign = "n";
+    right_wheel_sign = "p";
   }
   right_encoder_counter++;
 }
@@ -217,11 +217,11 @@ void leftEncoderCallback()
 {
   if(digitalRead(left_encoder_phaseB) == HIGH)
   {
-    left_wheel_sign = "n";
+    left_wheel_sign = "p";
   }
   else
   {
-    left_wheel_sign = "p";
+    left_wheel_sign = "n";
   }
   left_encoder_counter++;
 }

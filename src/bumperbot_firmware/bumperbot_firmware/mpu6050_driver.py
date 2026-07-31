@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import time
 import rclpy.time
 import smbus
 import rclpy
@@ -40,8 +41,25 @@ class MPU6050_Driver(Node):
         # field entirely and rely only on angular_velocity / linear_acceleration.
         # See: https://docs.ros.org/en/api/sensor_msgs/html/msg/Imu.html
         self.imu_msg_.orientation_covariance[0] = -1.0
+
+        # MEMS gyros report a small nonzero rate even at rest; left uncorrected, that
+        # constant bias integrates over time into continuous heading drift. Average it
+        # out here while the robot is assumed stationary at startup.
+        self.gyro_z_bias_ = self.calibrate_gyro_z_bias()
+
         self.frequency_ = 0.01
         self.timer_ = self.create_timer(self.frequency_, self.timerCallback)
+
+    def calibrate_gyro_z_bias(self):
+        self.get_logger().info("Calibrating gyro Z bias, keep the robot stationary...")
+        sample_count = 200
+        total = 0
+        for _ in range(sample_count):
+            total += self.read_raw_data(GYRO_ZOUT_H)
+            time.sleep(0.005)
+        bias = total / sample_count
+        self.get_logger().info(f"Gyro Z bias: {bias:.2f} raw counts")
+        return bias
 
     def timerCallback(self):
         try:
@@ -70,7 +88,7 @@ class MPU6050_Driver(Node):
             # by rotating the robot left by hand and checking `ros2 topic echo /imu/out`
             # reports a positive angular_velocity.z. If it's negative, flip this to:
             #   self.imu_msg_.angular_velocity.z = -(gyro_z / 938.73)
-            self.imu_msg_.angular_velocity.z = gyro_z / 938.73
+            self.imu_msg_.angular_velocity.z = (gyro_z - self.gyro_z_bias_) / 938.73
 
             self.imu_msg_.header.stamp = self.get_clock().now().to_msg()
             self.imu_pub_.publish(self.imu_msg_)

@@ -2,6 +2,7 @@
 import rclpy
 import time
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Imu
 
 imu_pub = None
@@ -21,7 +22,7 @@ def main(args=None):
     node = Node('imu_republisher_node')
     time.sleep(1)
     imu_pub = node.create_publisher(Imu, "imu_ekf", 10)
-    imu_sub = node.create_subscription(Imu, "imu/out", imuCallback, 10)
+    imu_sub = node.create_subscription(Imu, "imu/out", imuCallback, qos_profile=qos_profile_sensor_data)
     rclpy.spin(node)
     rclpy.shutdown()
 

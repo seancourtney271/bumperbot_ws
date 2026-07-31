@@ -58,17 +58,19 @@ class MPU6050_Driver(Node):
             gyro_y = self.read_raw_data(GYRO_YOUT_H)
             gyro_z = self.read_raw_data(GYRO_ZOUT_H)
             
-            # Full scale range +/- 250 degree/C as per sensitivity scale factor     
+            # Full scale range +/- 250 degree/C as per sensitivity scale factor
             self.imu_msg_.linear_acceleration.x = acc_x / 1670.13
             self.imu_msg_.linear_acceleration.y = acc_y / 1670.13
             self.imu_msg_.linear_acceleration.z = acc_z / 1670.13
-            self.imu_msg_.angular_velocity.x = gyro_x / 7509.55
-            self.imu_msg_.angular_velocity.y = gyro_y / 7509.55
+            # GYRO_CONFIG is set to 24 (FS_SEL=3, +/- 2000 deg/s, 16.384 LSB/(deg/s)),
+            # so the divisor must be 16.384 * (180/pi), not the +/- 250 deg/s value.
+            self.imu_msg_.angular_velocity.x = gyro_x / 938.73
+            self.imu_msg_.angular_velocity.y = gyro_y / 938.73
             # NOTE: verify this sign matches REP 103 (positive = counterclockwise/left turn)
             # by rotating the robot left by hand and checking `ros2 topic echo /imu/out`
             # reports a positive angular_velocity.z. If it's negative, flip this to:
-            #   self.imu_msg_.angular_velocity.z = -(gyro_z / 7509.55)
-            self.imu_msg_.angular_velocity.z = gyro_z / 7509.55
+            #   self.imu_msg_.angular_velocity.z = -(gyro_z / 938.73)
+            self.imu_msg_.angular_velocity.z = gyro_z / 938.73
 
             self.imu_msg_.header.stamp = self.get_clock().now().to_msg()
             self.imu_pub_.publish(self.imu_msg_)

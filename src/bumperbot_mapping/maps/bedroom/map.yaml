@@ -1,4 +1,4 @@
-image: bedroom.pgm
+image: map.pgm
 mode: trinary
 resolution: 0.050
 origin: [-1.926, -1.685, 0]

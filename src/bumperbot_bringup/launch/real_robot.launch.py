@@ -9,10 +9,17 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     use_slam = LaunchConfiguration("use_slam")
+    map_name = LaunchConfiguration("map_name")
 
     use_slam_arg = DeclareLaunchArgument(
         "use_slam",
         default_value="false"
+    )
+
+    map_name_arg = DeclareLaunchArgument(
+        "map_name",
+        default_value="bedroom",
+        description="Name of the saved map (folder under bumperbot_mapping/maps) to localize against when use_slam is false"
     )
 
     hardware_interface = IncludeLaunchDescription(
@@ -64,15 +71,19 @@ def generate_launch_description():
         executable="mpu6050_driver.py"
     )
 
-    # localization = IncludeLaunchDescription(
-    #     os.path.join(
-    #         get_package_share_directory("bumperbot_localization"),
-    #         "launch",
-    #         "global_localization.launch.py"
-    #     ),
-    #     condition=UnlessCondition(use_slam)
-    # )
-    localization = IncludeLaunchDescription(
+    global_localization = IncludeLaunchDescription(
+        os.path.join(
+            get_package_share_directory("bumperbot_localization"),
+            "launch",
+            "global_localization.launch.py"
+        ),
+        launch_arguments={
+            "map_name": map_name,
+            "use_sim_time": "False"
+        }.items(),
+        condition=UnlessCondition(use_slam)
+    )
+    local_localization = IncludeLaunchDescription(
         os.path.join(get_package_share_directory("bumperbot_localization"), "launch", "local_localization.launch.py"),
     )
 
@@ -103,12 +114,14 @@ def generate_launch_description():
     
     return LaunchDescription([
         use_slam_arg,
+        map_name_arg,
         hardware_interface,
         laser_driver,
         controller,
         joystick,
         imu_driver_node,
-        localization,
+        local_localization,
+        global_localization,
         slam,
         foxglove_bridge # Added here
     ])

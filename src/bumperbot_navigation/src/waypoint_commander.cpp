@@ -52,7 +52,11 @@ void WaypointCommander::goalCallback(const geometry_msgs::msg::PoseStamped::Shar
 
     geometry_msgs::msg::PoseStamped start;
     start.header.frame_id = global_frame_;
-    start.header.stamp = get_clock()->now();
+    // Leave stamp at zero (rclcpp::Time() default) to mean "latest available transform",
+    // matching tf2::TimePointZero convention used elsewhere in this codebase. Stamping
+    // this with now() caused planner_server to look up base_link->map at an exact
+    // timestamp that TF publishing (often lagging under this Pi's CPU load) hadn't
+    // reached yet, producing an "extrapolation into the future" error.
     start.pose.position.x = robot_tf.transform.translation.x;
     start.pose.position.y = robot_tf.transform.translation.y;
     start.pose.orientation = robot_tf.transform.rotation;

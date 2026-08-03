@@ -87,6 +87,18 @@ def generate_launch_description():
         os.path.join(get_package_share_directory("bumperbot_localization"), "launch", "local_localization.launch.py"),
     )
 
+    navigation = IncludeLaunchDescription(
+        os.path.join(
+            get_package_share_directory("bumperbot_navigation"),
+            "launch",
+            "navigation.launch.py"
+        ),
+        launch_arguments={
+            "use_sim_time": "False"
+        }.items(),
+        condition=UnlessCondition(use_slam)
+    )
+
     slam = IncludeLaunchDescription(
         os.path.join(
             get_package_share_directory("bumperbot_mapping"),
@@ -122,6 +134,7 @@ def generate_launch_description():
         imu_driver_node,
         local_localization,
         global_localization,
+        navigation,
         slam,
         foxglove_bridge # Added here
     ])

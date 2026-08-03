@@ -7,9 +7,38 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-# uncomment the following section in order to fill in
-# further dependencies manually.
-# find_package(<dependency> REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(nav2_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
+
+include_directories(include)
+
+add_executable(waypoint_commander src/waypoint_commander.cpp)
+ament_target_dependencies(waypoint_commander
+  rclcpp
+  rclcpp_action
+  nav2_msgs
+  nav_msgs
+  geometry_msgs
+  tf2_ros)
+
+install(
+  DIRECTORY include
+  DESTINATION include
+)
+
+install(TARGETS
+  waypoint_commander
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  DIRECTORY config launch
+  DESTINATION share/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

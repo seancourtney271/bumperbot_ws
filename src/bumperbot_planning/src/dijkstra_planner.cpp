@@ -74,10 +74,18 @@ namespace bumperbot_planning
             }
         }
 
-        // Exploration finished goal mode reached or no solution found
-        // Make path to goal
+        // Exploration finished: either the goal was reached, or the queue ran dry
+        // without ever reaching it (goal unreachable/blocked/inflated-over). Only
+        // reconstruct a path in the former case, otherwise hand back empty so
+        // callers get a clear planning failure instead of a path to the wrong place.
         nav_msgs::msg::Path path;
         path.header.frame_id = global_frame_;
+
+        if(!(worldToGrid(goal.pose) == active_node))
+        {
+            RCLCPP_WARN(node_->get_logger(), "DijkstraPlanner: exhausted search without reaching the goal");
+            return path;
+        }
         // Reconstruct path to goal backwards
         while(active_node.prev && rclcpp::ok())
         {

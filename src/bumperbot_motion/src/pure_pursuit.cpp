@@ -24,6 +24,7 @@ namespace bumperbot_motion
         look_ahead_distance = get_parameter("look_ahead_distance").as_double();
         maximum_linear_velocity = get_parameter("maximum_linear_velocity").as_double();
         maximum_angular_velocity = get_parameter("maximum_angular_velocity").as_double();
+        path_planner_node_name = get_parameter("path_subscriber").as_string();
 
         // Subscribe to the planned path. The callback saves the latest path for use by the control loop.
         path_subscriber = create_subscription<nav_msgs::msg::Path>(path_planner_node_name, 10, std::bind(&PurePursuit::pathCallback, this, std::placeholders::_1));

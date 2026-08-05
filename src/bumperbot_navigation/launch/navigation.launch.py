@@ -26,6 +26,17 @@ def generate_launch_description():
         description="Full path to the planner_server yaml file to load"
     )
 
+    costmap_config = LaunchConfiguration("costmap_config")
+    costmap_config_arg = DeclareLaunchArgument(
+        "costmap_config",
+        default_value=os.path.join(
+            get_package_share_directory("bumperbot_navigation"),
+            "config",
+            "costmap.yaml"
+        ),
+        description="Full path to the local costmap yaml file to load"
+    )
+
     planner_server = Node(
         package="nav2_planner",
         executable="planner_server",
@@ -37,13 +48,24 @@ def generate_launch_description():
         ],
     )
 
+    local_costmap_node = Node(
+        package="bumperbot_navigation",
+        executable="local_costmap_node",
+        name="local_costmap",
+        output="screen",
+        parameters=[
+            costmap_config,
+            {"use_sim_time": use_sim_time},
+        ],
+    )
+
     lifecycle_manager = Node(
         package="nav2_lifecycle_manager",
         executable="lifecycle_manager",
         name="lifecycle_manager_navigation",
         output="screen",
         parameters=[
-            {"node_names": ["planner_server"]},
+            {"node_names": ["planner_server", "local_costmap"]},
             {"use_sim_time": use_sim_time},
             {"autostart": True},
             # This Pi has repeatedly shown slow lifecycle service responses under
@@ -60,6 +82,7 @@ def generate_launch_description():
         output="screen",
         parameters=[
             {"path_subscriber": "/plan"},
+            {"costmap_topic": "/local_costmap/costmap"},
             {"use_sim_time": use_sim_time},
         ],
     )
@@ -77,7 +100,9 @@ def generate_launch_description():
     return LaunchDescription([
         use_sim_time_arg,
         planner_config_arg,
+        costmap_config_arg,
         planner_server,
+        local_costmap_node,
         lifecycle_manager,
         pure_pursuit,
         waypoint_commander,

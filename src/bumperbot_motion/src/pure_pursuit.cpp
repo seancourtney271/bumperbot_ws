@@ -20,14 +20,26 @@ namespace bumperbot_motion
         // Topic used to subscribe to the path planner output.
         declare_parameter<std::string>("path_subscriber", path_planner_node_name);
 
+        declare_parameter<std::string>("costmap_topic", "/local_costmap/costmap");
+        declare_parameter<int>("occupied_threshold", 90);
+
         // Load parameter values after declaration so runtime overrides take effect.
         look_ahead_distance = get_parameter("look_ahead_distance").as_double();
         maximum_linear_velocity = get_parameter("maximum_linear_velocity").as_double();
         maximum_angular_velocity = get_parameter("maximum_angular_velocity").as_double();
         path_planner_node_name = get_parameter("path_subscriber").as_string();
+        std::string costmap_topic = get_parameter("costmap_topic").as_string();
+        occupied_threshold = get_parameter("occupied_threshold").as_int();
 
         // Subscribe to the planned path. The callback saves the latest path for use by the control loop.
         path_subscriber = create_subscription<nav_msgs::msg::Path>(path_planner_node_name, 10, std::bind(&PurePursuit::pathCallback, this, std::placeholders::_1));
+
+        // Costmap is published with transient_local durability (same convention as /map),
+        // so new subscribers still get the current costmap even if it was published before
+        // this node came up.
+        costmap_subscriber = create_subscription<nav_msgs::msg::OccupancyGrid>(
+            costmap_topic, rclcpp::QoS(1).transient_local(),
+            std::bind(&PurePursuit::costmapCallback, this, std::placeholders::_1));
 
         // Publish velocity commands and the next selected target pose.
         command_publisher = create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
@@ -50,6 +62,12 @@ namespace bumperbot_motion
         RCLCPP_INFO(get_logger(), "Path Recieved");
         global_plan = *path;
         current_plan_index = 0;
+    }
+
+    // Store the latest costmap for use by isPoseInCollision().
+    void PurePursuit::costmapCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr costmap)
+    {
+        latest_costmap = costmap;
     }
 
     // Control loop executed on a fixed timer.
@@ -113,6 +131,16 @@ namespace bumperbot_motion
 
         // Publish look ahead pose
         carrot_pose_publisher->publish(look_ahead_pose);
+
+        // Stop rather than drive into an obstacle the local costmap has picked up
+        // since this path was planned (look_ahead_pose is still in the plan's
+        // frame here, before it gets rewritten into the robot-relative frame below).
+        if(isPoseInCollision(look_ahead_pose))
+        {
+            RCLCPP_WARN(get_logger(), "Obstacle detected ahead, stopping.");
+            command_publisher->publish(geometry_msgs::msg::Twist());
+            return;
+        }
 
         // Get the error of look ahead pose and robot pose
         tf2::Transform robot_tf, look_ahead_pose_tf, look_ahead_pose_robot_tf;
@@ -223,6 +251,48 @@ namespace bumperbot_motion
         {
             return 0.0;
         }
+    }
+
+    bool PurePursuit::isPoseInCollision(const geometry_msgs::msg::PoseStamped & pose)
+    {
+        if(!latest_costmap)
+        {
+            // No costmap data yet -- don't block the robot on missing data.
+            return false;
+        }
+
+        geometry_msgs::msg::PoseStamped pose_in_costmap_frame;
+        if(pose.header.frame_id == latest_costmap->header.frame_id)
+        {
+            pose_in_costmap_frame = pose;
+        }
+        else
+        {
+            try
+            {
+                auto transform = tf_buffer->lookupTransform(
+                    latest_costmap->header.frame_id, pose.header.frame_id, tf2::TimePointZero);
+                tf2::doTransform(pose, pose_in_costmap_frame, transform);
+            }
+            catch(const tf2::TransformException & ex)
+            {
+                RCLCPP_WARN(get_logger(), "Could not transform look-ahead pose into costmap frame: %s", ex.what());
+                return false;
+            }
+        }
+
+        const auto & info = latest_costmap->info;
+        int grid_x = static_cast<int>((pose_in_costmap_frame.pose.position.x - info.origin.position.x) / info.resolution);
+        int grid_y = static_cast<int>((pose_in_costmap_frame.pose.position.y - info.origin.position.y) / info.resolution);
+
+        if(grid_x < 0 || grid_y < 0 || grid_x >= static_cast<int>(info.width) || grid_y >= static_cast<int>(info.height))
+        {
+            // Outside the costmap's known area -- nothing to check against.
+            return false;
+        }
+
+        int8_t occupancy = latest_costmap->data[grid_y * info.width + grid_x];
+        return occupancy >= occupied_threshold;
     }
 }
 

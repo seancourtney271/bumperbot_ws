@@ -18,7 +18,10 @@ WaypointCommander::WaypointCommander() : Node("waypoint_commander")
 
     action_client_ = rclcpp_action::create_client<ComputePathToPose>(this, "compute_path_to_pose");
 
-    path_publisher_ = create_publisher<nav_msgs::msg::Path>("/plan", 10);
+    // transient_local so Foxglove/RViz clients that subscribe after a path was
+    // already computed (e.g. opening the panel mid-drive) still see it immediately,
+    // matching the same durability convention already used for /map.
+    path_publisher_ = create_publisher<nav_msgs::msg::Path>("/plan", rclcpp::QoS(1).transient_local());
 
     // Foxglove's "Publish"/goal-click tool defaults to this topic name
     // (carried over from classic ROS1 move_base/RViz conventions).

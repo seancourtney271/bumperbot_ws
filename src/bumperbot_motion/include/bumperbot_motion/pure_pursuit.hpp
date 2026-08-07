@@ -31,6 +31,13 @@ namespace bumperbot_motion
             double look_ahead_distance;
             double maximum_linear_velocity;
             double maximum_angular_velocity;
+            // Above this heading error (radians) to the look-ahead point, rotate in
+            // place instead of curvature-driving -- the curvature formula degenerates
+            // for points far to the side or behind the robot.
+            double heading_error_threshold;
+            // Once position is reached, how close (radians) the final heading must be
+            // to the goal pose's orientation before declaring the goal fully reached.
+            double goal_yaw_tolerance;
             // Holds path
             nav_msgs::msg::Path global_plan;
 

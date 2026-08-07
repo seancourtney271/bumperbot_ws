@@ -3,6 +3,7 @@
 #include "bumperbot_motion/pure_pursuit.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+#include "tf2/utils.h"
 
 namespace bumperbot_motion
 {
@@ -22,6 +23,8 @@ namespace bumperbot_motion
 
         declare_parameter<std::string>("costmap_topic", "/local_costmap/costmap");
         declare_parameter<int>("occupied_threshold", 90);
+        declare_parameter<double>("heading_error_threshold", 0.5);
+        declare_parameter<double>("goal_yaw_tolerance", 0.1);
 
         // Load parameter values after declaration so runtime overrides take effect.
         look_ahead_distance = get_parameter("look_ahead_distance").as_double();
@@ -30,6 +33,8 @@ namespace bumperbot_motion
         path_planner_node_name = get_parameter("path_subscriber").as_string();
         std::string costmap_topic = get_parameter("costmap_topic").as_string();
         occupied_threshold = get_parameter("occupied_threshold").as_int();
+        heading_error_threshold = get_parameter("heading_error_threshold").as_double();
+        goal_yaw_tolerance = get_parameter("goal_yaw_tolerance").as_double();
 
         // Subscribe to the planned path. The callback saves the latest path for use by the control loop.
         path_subscriber = create_subscription<nav_msgs::msg::Path>(path_planner_node_name, 10, std::bind(&PurePursuit::pathCallback, this, std::placeholders::_1));
@@ -120,12 +125,26 @@ namespace bumperbot_motion
         double dy = look_ahead_pose.pose.position.y - robot_pose_stamped.pose.position.y;
         // Calculate distance of each pose
         double distance = std::sqrt(dx * dx + dy * dy);
-        // Did we reach goal
+        // Did we reach the goal position?
         if(distance <= 0.1)
         {
-            // Reached Goal Pose
-            RCLCPP_INFO(get_logger(), "Goal Reached!");
-            global_plan.poses.clear();
+            // Position reached -- now check whether we're also facing the goal's
+            // desired heading before declaring the goal fully done. Without this,
+            // the robot just freezes at whatever heading it happened to arrive with.
+            double goal_yaw = tf2::getYaw(global_plan.poses.back().pose.orientation);
+            double robot_yaw = tf2::getYaw(robot_pose_stamped.pose.orientation);
+            double yaw_error = std::atan2(std::sin(goal_yaw - robot_yaw), std::cos(goal_yaw - robot_yaw));
+
+            if(std::abs(yaw_error) <= goal_yaw_tolerance)
+            {
+                RCLCPP_INFO(get_logger(), "Goal Reached!");
+                global_plan.poses.clear();
+                return;
+            }
+
+            geometry_msgs::msg::Twist cmd_vel;
+            cmd_vel.angular.z = (yaw_error > 0 ? 1.0 : -1.0) * maximum_angular_velocity;
+            command_publisher->publish(cmd_vel);
             return;
         }
 
@@ -149,14 +168,27 @@ namespace bumperbot_motion
         // Gets the error of the pose of the robot and the look ahead pose we want to reach
         look_ahead_pose_robot_tf = robot_tf.inverse() * look_ahead_pose_tf;
 
-        // Get the best curvature for movement to look ahead pose
+        // look_ahead_pose is now expressed in the robot's own frame: atan2(y, x)
+        // is the heading error to it.
         tf2::toMsg(look_ahead_pose_robot_tf, look_ahead_pose.pose);
-        double curvature = getCurvature(look_ahead_pose.pose);
+        double heading_error = std::atan2(look_ahead_pose.pose.position.y, look_ahead_pose.pose.position.x);
 
-        // Create command vel
         geometry_msgs::msg::Twist cmd_vel;
-        cmd_vel.linear.x = maximum_linear_velocity;
-        cmd_vel.angular.z = curvature * maximum_angular_velocity;
+        if(std::abs(heading_error) > heading_error_threshold)
+        {
+            // Look-ahead point is well off to the side or behind the robot --
+            // the curvature formula below degenerates for large heading errors
+            // (this is what previously sent the robot the wrong way entirely when
+            // a new goal required a near-180-degree turn from its current heading).
+            // Rotate in place toward it first instead.
+            cmd_vel.angular.z = (heading_error > 0 ? 1.0 : -1.0) * maximum_angular_velocity;
+        }
+        else
+        {
+            double curvature = getCurvature(look_ahead_pose.pose);
+            cmd_vel.linear.x = maximum_linear_velocity;
+            cmd_vel.angular.z = curvature * maximum_angular_velocity;
+        }
 
         // Publish cmd_Vel
         command_publisher->publish(cmd_vel);

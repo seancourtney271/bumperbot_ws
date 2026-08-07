@@ -11,7 +11,7 @@ export ROS_DOMAIN_ID=2
 ros2 launch bumperbot_bringup real_robot.launch.py use_slam:=true
 
 // Save Map
-ros2 service call /map_saver_server/save_map nav2_msgs/srv/SaveMap "{map_topic: map, map_url: '/home/seancour/bumperbot_ws/src/bumperbot_mapping/maps/bedroom', image_format: pgm, map_mode: trinary, free_thresh: 0.25, occupied_thresh: 0.65}"
+ros2 service call /map_saver_server/save_map nav2_msgs/srv/SaveMap "{map_topic: map, map_url: '/home/seancour/bumperbot_ws/src/bumperbot_mapping/maps/cube/map', image_format: pgm, map_mode: trinary, free_thresh: 0.25, occupied_thresh: 0.65}"
 
 // Load Map without slam 
-ros2 launch bumperbot_bringup real_robot.launch.py use_slam:=false map_name:=bedroom
+ros2 launch bumperbot_bringup real_robot.launch.py use_slam:=false map_name:=cube

@@ -38,6 +38,12 @@ namespace bumperbot_motion
             // Once position is reached, how close (radians) the final heading must be
             // to the goal pose's orientation before declaring the goal fully reached.
             double goal_yaw_tolerance;
+            // Rotation direction (+1/-1) committed to while rotating in place, or 0
+            // when not currently rotating. Locked in once chosen and held until the
+            // heading error shrinks below threshold, so noise near the +-pi wraparound
+            // boundary (target nearly behind the robot) can't flip the sign every cycle
+            // and cause the robot to oscillate in place instead of turning through.
+            int locked_rotation_sign;
             // Holds path
             nav_msgs::msg::Path global_plan;
 

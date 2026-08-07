@@ -22,6 +22,12 @@ String left_wheel_sign = "p";  // 'p' = positive, 'n' = negative
 unsigned long last_millis = 0;
 const unsigned long interval = 100;
 
+// Safety watchdog: if no velocity command arrives within this window (ROS was
+// Ctrl+C'd, crashed, or the serial link dropped), stop the motors instead of
+// continuing to execute the last command indefinitely.
+unsigned long last_command_millis = 0;
+const unsigned long command_timeout = 500;
+
 // Interpret Serial Messages
 bool is_right_wheel_cmd = false;
 bool is_left_wheel_cmd = false;
@@ -146,6 +152,7 @@ void loop() {
       {
         left_wheel_cmd_vel = atof(value);
         is_cmd_complete = true;
+        last_command_millis = millis();
       }
       // Reset for next command
       value_idx = 0;
@@ -173,7 +180,14 @@ void loop() {
   {
     right_wheel_meas_vel = (10 * right_encoder_counter * (60.0/494.0)) * 0.10472;
     left_wheel_meas_vel = (10 * left_encoder_counter * (60.0/494.0)) * 0.10472;
-    
+
+    // No command received recently -- force a stop rather than keep driving.
+    if(current_millis - last_command_millis > command_timeout)
+    {
+      right_wheel_cmd_vel = 0.0;
+      left_wheel_cmd_vel = 0.0;
+    }
+
     rightMotor.Compute();
     leftMotor.Compute();
 

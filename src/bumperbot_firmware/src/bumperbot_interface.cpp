@@ -121,6 +121,12 @@ CallbackReturn BumperbotInterface::on_deactivate(const rclcpp_lifecycle::State &
   {
     try
     {
+      // Explicitly command zero velocity before closing the port. Without this,
+      // a clean shutdown (e.g. Ctrl+C on the launch file) leaves the Arduino still
+      // executing whatever velocity it last received, since closing the serial
+      // port on this end doesn't itself tell the firmware to stop.
+      velocity_commands_ = { 0.0, 0.0 };
+      write(rclcpp::Time(), rclcpp::Duration(0, 0));
       arduino_.Close();
     }
     catch (...)

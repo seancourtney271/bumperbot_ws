@@ -11,7 +11,7 @@ namespace bumperbot_motion
     // The node receives a global path, transforms it into the robot's current frame,
     // and will eventually produce velocity commands based on a PD control law.
     PurePursuit::PurePursuit() : Node("pure_pursuit_planner_node"),
-        look_ahead_distance(0.5), maximum_linear_velocity(0.3), maximum_angular_velocity(1.0), path_planner_node_name("/astar/path"), current_plan_index(0)
+        look_ahead_distance(0.5), maximum_linear_velocity(0.3), maximum_angular_velocity(1.0), path_planner_node_name("/astar/path"), current_plan_index(0), locked_rotation_sign(0)
     {
         // Declare configurable ROS2 parameters with default values.
         declare_parameter<double>("look_ahead_distance", look_ahead_distance);  // the distance to plan path to ahead
@@ -67,6 +67,7 @@ namespace bumperbot_motion
         RCLCPP_INFO(get_logger(), "Path Recieved");
         global_plan = *path;
         current_plan_index = 0;
+        locked_rotation_sign = 0;
     }
 
     // Store the latest costmap for use by isPoseInCollision().
@@ -139,11 +140,17 @@ namespace bumperbot_motion
             {
                 RCLCPP_INFO(get_logger(), "Goal Reached!");
                 global_plan.poses.clear();
+                locked_rotation_sign = 0;
                 return;
             }
 
+            if(locked_rotation_sign == 0)
+            {
+                locked_rotation_sign = (yaw_error > 0) ? 1 : -1;
+            }
+
             geometry_msgs::msg::Twist cmd_vel;
-            cmd_vel.angular.z = (yaw_error > 0 ? 1.0 : -1.0) * maximum_angular_velocity;
+            cmd_vel.angular.z = locked_rotation_sign * maximum_angular_velocity;
             command_publisher->publish(cmd_vel);
             return;
         }
@@ -180,11 +187,17 @@ namespace bumperbot_motion
             // the curvature formula below degenerates for large heading errors
             // (this is what previously sent the robot the wrong way entirely when
             // a new goal required a near-180-degree turn from its current heading).
-            // Rotate in place toward it first instead.
-            cmd_vel.angular.z = (heading_error > 0 ? 1.0 : -1.0) * maximum_angular_velocity;
+            // Rotate in place toward it first instead, locking in the direction so
+            // noise near the +-pi boundary can't flip it back and forth forever.
+            if(locked_rotation_sign == 0)
+            {
+                locked_rotation_sign = (heading_error > 0) ? 1 : -1;
+            }
+            cmd_vel.angular.z = locked_rotation_sign * maximum_angular_velocity;
         }
         else
         {
+            locked_rotation_sign = 0;
             double curvature = getCurvature(look_ahead_pose.pose);
             cmd_vel.linear.x = maximum_linear_velocity;
             cmd_vel.angular.z = curvature * maximum_angular_velocity;

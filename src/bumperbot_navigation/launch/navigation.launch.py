@@ -65,7 +65,7 @@ def generate_launch_description():
         name="lifecycle_manager_navigation",
         output="screen",
         parameters=[
-            {"node_names": ["planner_server", "local_costmap"]},
+            {"node_names": ["planner_server", "local_costmap/local_costmap"]},
             {"use_sim_time": use_sim_time},
             {"autostart": True},
             # This Pi has repeatedly shown slow lifecycle service responses under

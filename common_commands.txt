@@ -1,6 +1,8 @@
 ros2 launch bumperbot_bringup simulated_robot.launch.py world_name:=small_house
 source install/setup.bash
 
+// 1 Core building of package
+colcon build --parallel-workers 1
 
 ///Domain IDs
 export ROS_DOMAIN_ID=2

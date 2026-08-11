@@ -3,6 +3,7 @@ source install/setup.bash
 
 // 1 Core building of package
 colcon build --parallel-workers 1
+colcon build --packages-select bumperbot_
 
 ///Domain IDs
 export ROS_DOMAIN_ID=2
@@ -15,3 +16,15 @@ ros2 service call /map_saver_server/save_map nav2_msgs/srv/SaveMap "{map_topic: 
 
 // Load Map without slam 
 ros2 launch bumperbot_bringup real_robot.launch.py use_slam:=false map_name:=cube
+
+// Launch Foxglove Bridge
+ros2 launch foxglove_bridge foxglove_bridge_launch.xml
+
+ros2 run camera_calibration cameracalibrator --size 7x9 --square 0.020 --ros-args -r image:=/image_raw
+
+// Aruco Command
+ros2 run ros2_aruco aruco_node --ros-args \
+  -p marker_size:=0.150 \
+  -p aruco_dictionary_id:="DICT_4X4_1000" \
+  -p image_topic:=/image_raw \
+  -p camera_info_topic:=/camera_info

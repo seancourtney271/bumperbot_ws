@@ -67,8 +67,12 @@ class StationRecorder(Node):
             marker_pose.pose = pose
 
             try:
+                # Use the marker message's own timestamp, not "latest" -- the pose was
+                # computed from an image captured slightly earlier (capture + detection
+                # latency), and while the robot is turning, "latest" TF and "TF at capture
+                # time" disagree enough to visibly shift the recorded station position.
                 transform = self.tf_buffer.lookup_transform(
-                    "map", msg.header.frame_id, rclpy.time.Time())
+                    "map", msg.header.frame_id, msg.header.stamp)
             except (LookupException, ConnectivityException, ExtrapolationException) as ex:
                 self.get_logger().warn(f"Could not transform marker pose into map frame: {ex}")
                 continue

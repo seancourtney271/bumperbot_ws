@@ -71,6 +71,14 @@ def generate_launch_description():
         executable="mpu6050_driver.py"
     )
 
+    camera = IncludeLaunchDescription(
+        os.path.join(
+            get_package_share_directory("bumperbot_bringup"),
+            "launch",
+            "camera.launch.py"
+        ),
+    )
+
     global_localization = IncludeLaunchDescription(
         os.path.join(
             get_package_share_directory("bumperbot_localization"),
@@ -134,6 +142,7 @@ def generate_launch_description():
         controller,
         joystick,
         imu_driver_node,
+        camera,
         local_localization,
         global_localization,
         navigation,

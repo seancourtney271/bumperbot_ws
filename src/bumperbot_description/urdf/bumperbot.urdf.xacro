@@ -175,14 +175,14 @@
                izz="2.30279421279312E-08" />
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0" />
       <geometry>
         <mesh filename="package://bumperbot_description/meshes/imu_link.STL" />
       </geometry>
       <material name="blue"/>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0" />
       <geometry>
         <mesh filename="package://bumperbot_description/meshes/imu_link.STL" />
       </geometry>
@@ -252,7 +252,7 @@
        already sits 0.033 m above the ground per base_joint, so the offset here is
        0.1778 - 0.033 = 0.1448 m. -->
   <joint name="camera_joint" type="fixed">
-    <origin xyz="0.04755 0 0.1448" rpy="0 0 0" />
+    <origin xyz="0.04755 0 0.0813" rpy="0 0 0" />
     <parent link="base_link" />
     <child link="camera_link" />
   </joint>

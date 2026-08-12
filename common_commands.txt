@@ -31,3 +31,7 @@ ros2 run ros2_aruco aruco_node --ros-args \
   -p aruco_dictionary_id:="DICT_4X4_1000" \
   -p image_topic:=/image_raw \
   -p camera_info_topic:=/camera_info
+
+
+  ///// Ros Frame convetion
+  Red = X, Green = Y, Blue = Z (standard ROS/REP103 convention, same order as RGB)

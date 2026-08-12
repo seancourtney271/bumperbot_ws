@@ -137,8 +137,7 @@ class StationRecorder(Node):
             response.message = "No stations recorded yet -- drive past each marker before saving."
             return response
 
-        maps_dir = os.path.join(
-            get_package_share_directory("bumperbot_mapping"), "maps", self.map_name)
+        maps_dir = os.path.join(self._source_maps_dir(), self.map_name)
         os.makedirs(maps_dir, exist_ok=True)
         stations_path = os.path.join(maps_dir, "stations.yaml")
 
@@ -146,9 +145,25 @@ class StationRecorder(Node):
             yaml.safe_dump({"stations": self.stations}, f)
 
         response.success = True
-        response.message = f"Saved {len(self.stations)} station(s) to {stations_path}"
+        response.message = (
+            f"Saved {len(self.stations)} station(s) to {stations_path}. "
+            "Rebuild bumperbot_mapping before localizing so this reaches the install space too."
+        )
         self.get_logger().info(response.message)
         return response
+
+    def _source_maps_dir(self):
+        # get_package_share_directory always points at the install space (by design --
+        # install space is meant to work standalone, without src/ present). Maps are kept
+        # in git under src/ though, so walk back from ".../install/bumperbot_mapping/..."
+        # to the workspace root and target src/bumperbot_mapping/maps instead. This only
+        # works for a standard (non-merged) colcon workspace layout, which is what this
+        # robot uses.
+        share_dir = get_package_share_directory("bumperbot_mapping")
+        workspace_root, sep, _ = share_dir.partition(os.sep + "install" + os.sep)
+        if not sep:
+            return os.path.join(share_dir, "maps")
+        return os.path.join(workspace_root, "src", "bumperbot_mapping", "maps")
 
 
 def main(args=None):

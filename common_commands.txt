@@ -22,6 +22,9 @@ ros2 launch foxglove_bridge foxglove_bridge_launch.xml
 
 ros2 run camera_calibration cameracalibrator --size 7x9 --square 0.020 --ros-args -r image:=/image_raw
 
+// Start Camera
+ros2 run usb_cam usb_cam_node_exe --ros-args -p video_device:=/dev/video0 -p framerate:=5.0 -p image_width:=640 -p image_height:=480
+
 // Aruco Command
 ros2 run ros2_aruco aruco_node --ros-args \
   -p marker_size:=0.150 \

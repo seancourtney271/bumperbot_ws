@@ -25,7 +25,13 @@ class StationRecorder(Node):
         super().__init__("station_recorder_node")
 
         self.declare_parameter("map_name", "bedroom")
+        self.declare_parameter("known_marker_ids", [0, 1])
         self.map_name = self.get_parameter("map_name").value
+        # ArUco detection on a 640x480 webcam occasionally misreads background
+        # clutter as a plausible-looking marker and reports a bogus ID -- only
+        # record IDs that are actually real, known station markers.
+        self.known_marker_ids = set(self.get_parameter("known_marker_ids").value)
+        self._warned_ids = set()
 
         # marker_id -> {"x", "y", "yaw"} in the map frame. Later sightings of
         # the same marker simply overwrite the earlier estimate.
@@ -47,6 +53,15 @@ class StationRecorder(Node):
 
     def marker_callback(self, msg: ArucoMarkers):
         for marker_id, pose in zip(msg.marker_ids, msg.poses):
+            marker_id = int(marker_id)
+            if marker_id not in self.known_marker_ids:
+                if marker_id not in self._warned_ids:
+                    self._warned_ids.add(marker_id)
+                    self.get_logger().warn(
+                        f"Ignoring detection of marker ID {marker_id} -- not in known_marker_ids "
+                        f"{sorted(self.known_marker_ids)} (likely a false-positive misread).")
+                continue
+
             marker_pose = PoseStamped()
             marker_pose.header = msg.header
             marker_pose.pose = pose
@@ -66,10 +81,12 @@ class StationRecorder(Node):
                 map_pose.pose.orientation.w,
             ])
 
-            self.stations[int(marker_id)] = {
-                "x": map_pose.pose.position.x,
-                "y": map_pose.pose.position.y,
-                "yaw": yaw,
+            # euler_from_quaternion returns numpy floats, which PyYAML's safe_dump
+            # can't represent -- cast everything to plain Python types before storing.
+            self.stations[marker_id] = {
+                "x": float(map_pose.pose.position.x),
+                "y": float(map_pose.pose.position.y),
+                "yaw": float(yaw),
             }
 
         self.publish_markers()

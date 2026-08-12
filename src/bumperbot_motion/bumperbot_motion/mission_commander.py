@@ -88,11 +88,13 @@ class MissionCommander(Node):
         goal.pose.position.x = station["x"]
         goal.pose.position.y = station["y"]
 
+        # quaternion_from_euler returns numpy floats; geometry_msgs fields expect
+        # plain Python floats.
         q = quaternion_from_euler(0, 0, station["yaw"])
-        goal.pose.orientation.x = q[0]
-        goal.pose.orientation.y = q[1]
-        goal.pose.orientation.z = q[2]
-        goal.pose.orientation.w = q[3]
+        goal.pose.orientation.x = float(q[0])
+        goal.pose.orientation.y = float(q[1])
+        goal.pose.orientation.z = float(q[2])
+        goal.pose.orientation.w = float(q[3])
 
         self.goal_publisher.publish(goal)
         self.get_logger().info(f"Sending goal to station {station_id}")

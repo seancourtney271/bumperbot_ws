@@ -25,14 +25,14 @@
                izz="2.0064271e-02" />
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0" />
       <geometry>
         <mesh filename="package://bumperbot_description/meshes/base_link.STL" />
       </geometry>
       <material name="black"/>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0" />
       <geometry>
         <mesh filename="package://bumperbot_description/meshes/base_link.STL" />
       </geometry>
@@ -54,7 +54,7 @@
                izz="1.8801969558182E-05" />
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="1.57 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh filename="package://bumperbot_description/meshes/wheel_right_link.STL" />
       </geometry>
@@ -85,7 +85,7 @@
                izz="1.88266886146847E-05" />
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="-1.57 0 0" />
+      <origin xyz="0 0 0" rpy="-3.14159265358979 0 0" />
       <geometry>
         <mesh filename="package://bumperbot_description/meshes/wheel_left_link.STL" />
       </geometry>
@@ -115,7 +115,7 @@
                izz="1.00967486676306E-10" />
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0" />
       <geometry>
         <mesh filename="package://bumperbot_description/meshes/caster_front_link.STL" />
       </geometry>
@@ -145,7 +145,7 @@
                izz="1.00967486676306E-10" />
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0" />
       <geometry>
         <mesh filename="package://bumperbot_description/meshes/caster_rear_link.STL" />
       </geometry>
@@ -205,14 +205,14 @@
                izz="4.14184164228595E-05" />
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0" />
       <geometry>
         <mesh filename="package://bumperbot_description/meshes/laser_link.STL" />
       </geometry>
       <material name="dark_grey"/>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0" />
       <geometry>
         <mesh filename="package://bumperbot_description/meshes/laser_link.STL" />
       </geometry>

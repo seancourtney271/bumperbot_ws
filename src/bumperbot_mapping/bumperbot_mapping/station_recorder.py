@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import math
 import yaml
 
 import rclpy
@@ -13,7 +14,7 @@ from std_srvs.srv import Trigger
 from geometry_msgs.msg import PoseStamped
 from tf2_ros import Buffer, TransformListener, LookupException, ConnectivityException, ExtrapolationException
 from tf2_geometry_msgs import do_transform_pose_stamped
-from tf_transformations import euler_from_quaternion
+from tf_transformations import quaternion_matrix
 
 
 # Watches for ArUco markers while SLAM is running and remembers where each one
@@ -26,7 +27,14 @@ class StationRecorder(Node):
 
         self.declare_parameter("map_name", "bedroom")
         self.declare_parameter("known_marker_ids", [0, 1])
+        self.declare_parameter("standoff_distance", 0.3)
         self.map_name = self.get_parameter("map_name").value
+        # Must match docking_controller's default -- the whole point of recording this
+        # standoff point (instead of the marker's own pose) is so mission_commander sends
+        # the robot to the same reachable spot docking_controller would otherwise compute
+        # live, rather than to the marker itself (which sits on/at the wall and is
+        # unreachable -- inside the costmap's occupied/inflated region).
+        self.standoff_distance = self.get_parameter("standoff_distance").value
         # ArUco detection on a 640x480 webcam occasionally misreads background
         # clutter as a plausible-looking marker and reports a bogus ID -- only
         # record IDs that are actually real, known station markers.
@@ -78,18 +86,29 @@ class StationRecorder(Node):
                 continue
 
             map_pose = do_transform_pose_stamped(marker_pose, transform)
-            _, _, yaw = euler_from_quaternion([
+
+            # The marker's local Z axis points out of its face -- toward whoever is
+            # looking at it. quaternion_matrix's third column is exactly that axis
+            # expressed in the map frame (equivalent to rotating the unit Z vector by
+            # the marker's orientation), matching docking_controller's C++ tf2::quatRotate.
+            rot = quaternion_matrix([
                 map_pose.pose.orientation.x,
                 map_pose.pose.orientation.y,
                 map_pose.pose.orientation.z,
                 map_pose.pose.orientation.w,
             ])
+            normal_x, normal_y = rot[0, 2], rot[1, 2]
 
-            # euler_from_quaternion returns numpy floats, which PyYAML's safe_dump
-            # can't represent -- cast everything to plain Python types before storing.
+            standoff_x = map_pose.pose.position.x + self.standoff_distance * normal_x
+            standoff_y = map_pose.pose.position.y + self.standoff_distance * normal_y
+            # Face back toward the marker from the standoff point.
+            yaw = math.atan2(-normal_y, -normal_x)
+
+            # quaternion_matrix returns numpy floats, which PyYAML's safe_dump can't
+            # represent -- cast everything to plain Python types before storing.
             self.stations[marker_id] = {
-                "x": float(map_pose.pose.position.x),
-                "y": float(map_pose.pose.position.y),
+                "x": float(standoff_x),
+                "y": float(standoff_y),
                 "yaw": float(yaw),
             }
 

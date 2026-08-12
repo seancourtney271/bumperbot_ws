@@ -226,6 +226,50 @@
     <axis xyz="0 0 0" />
   </joint>
 
+  <link name="camera_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="0.05" />
+      <inertia ixx="1.0E-6" ixy="0" ixz="0" iyy="1.0E-6" iyz="0" izz="1.0E-6" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.03 0.03 0.03" />
+      </geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.03 0.03 0.03" />
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Mounted on the front of the robot, directly above the front caster (matching
+       caster_front_joint's x/y), 7 inches (0.1778 m) above the ground. base_link
+       already sits 0.033 m above the ground per base_joint, so the offset here is
+       0.1778 - 0.033 = 0.1448 m. -->
+  <joint name="camera_joint" type="fixed">
+    <origin xyz="0.04755 0 0.1448" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="camera_link" />
+  </joint>
+
+  <!-- usb_cam/ros2_aruco publish in the standard camera optical frame convention
+       (Z out of the lens, X right, Y down), not the robot convention (X forward,
+       Y left, Z up) used everywhere else here. This fixed rotation is the standard
+       REP103-to-optical-frame conversion, and "default_cam" matches the exact
+       frame_id ros2_aruco is already publishing poses in. -->
+  <link name="default_cam"/>
+
+  <joint name="camera_optical_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="-1.5707963267948966 0 -1.5707963267948966" />
+    <parent link="camera_link" />
+    <child link="default_cam" />
+  </joint>
+
   <material name="blue">
     <color rgba="0 0 1 1"/>
   </material>

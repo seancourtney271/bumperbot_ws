@@ -1,215 +1,238 @@
-// CTRL SHIFT P > ROS2: Update C++ Properties
 #include <algorithm>
-#include "bumperbot_motion/pd_motion_planner.hpp"
+#include <cmath>
+#include "bumperbot_motion/docking_controller.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+#include "tf2/utils.h"
 
 namespace bumperbot_motion
 {
-    // Constructor for the PD motion planner node.
-    // The node receives a global path, transforms it into the robot's current frame,
-    // and will eventually produce velocity commands based on a PD control law.
-    PDMotionPlanner::PDMotionPlanner() : Node("pd_motion_planner_node"),
-        k_prop(2.0), k_diff(1.0), step_size(0.2), maximum_linear_velocity(0.3), maximum_angular_velocity(1.0), path_planner_node_name("/astar/path"), previous_linear_error(0.0), previous_angular_error(0.0)
+    // Drives the robot to a standoff pose in front of a chosen ArUco marker (a station's
+    // fiducial), facing it square-on, and reports when docked. Which marker to dock to is
+    // selected externally (via the target_marker_id parameter or the /docking/target_marker_id
+    // topic), so a mission sequencer can reuse this node for every station.
+    DockingController::DockingController() : Node("docking_controller_node"),
+        standoff_distance_(0.3), k_prop_linear_(1.0), k_prop_angular_(2.0),
+        maximum_linear_velocity_(0.15), maximum_angular_velocity_(0.5),
+        heading_error_threshold_(0.5), position_tolerance_(0.05), goal_yaw_tolerance_(0.1),
+        marker_timeout_(1.0), target_marker_id_(-1), locked_rotation_sign_(0),
+        has_target_pose_(false), docked_(false)
     {
-        // Declare configurable ROS2 parameters with default values.
-        declare_parameter<double>("kp", k_prop);  // proportional gain
-        declare_parameter<double>("kd", k_diff);  // differential gain
-        declare_parameter<double>("step_size", step_size);  // distance step for path point selection
-        declare_parameter<double>("maximum_linear_velocity", maximum_linear_velocity);  // max forward speed
-        declare_parameter<double>("maximum_angular_velocity", maximum_angular_velocity);  // max rotational speed
+        declare_parameter<double>("standoff_distance", standoff_distance_);
+        declare_parameter<double>("kp_linear", k_prop_linear_);
+        declare_parameter<double>("kp_angular", k_prop_angular_);
+        declare_parameter<double>("maximum_linear_velocity", maximum_linear_velocity_);
+        declare_parameter<double>("maximum_angular_velocity", maximum_angular_velocity_);
+        declare_parameter<double>("heading_error_threshold", heading_error_threshold_);
+        declare_parameter<double>("position_tolerance", position_tolerance_);
+        declare_parameter<double>("goal_yaw_tolerance", goal_yaw_tolerance_);
+        declare_parameter<double>("marker_timeout", marker_timeout_);
+        declare_parameter<int64_t>("target_marker_id", target_marker_id_);
 
-        // Topic used to subscribe to the path planner output.
-        declare_parameter<std::string>("path_subscriber", path_planner_node_name);
+        standoff_distance_ = get_parameter("standoff_distance").as_double();
+        k_prop_linear_ = get_parameter("kp_linear").as_double();
+        k_prop_angular_ = get_parameter("kp_angular").as_double();
+        maximum_linear_velocity_ = get_parameter("maximum_linear_velocity").as_double();
+        maximum_angular_velocity_ = get_parameter("maximum_angular_velocity").as_double();
+        heading_error_threshold_ = get_parameter("heading_error_threshold").as_double();
+        position_tolerance_ = get_parameter("position_tolerance").as_double();
+        goal_yaw_tolerance_ = get_parameter("goal_yaw_tolerance").as_double();
+        marker_timeout_ = get_parameter("marker_timeout").as_double();
+        target_marker_id_ = get_parameter("target_marker_id").as_int();
 
-        // Load parameter values after declaration so runtime overrides take effect.
-        k_prop = get_parameter("kp").as_double();
-        k_diff = get_parameter("kd").as_double();
-        step_size = get_parameter("step_size").as_double();
-        maximum_linear_velocity = get_parameter("maximum_linear_velocity").as_double();
-        maximum_angular_velocity = get_parameter("maximum_angular_velocity").as_double();
+        marker_subscriber_ = create_subscription<ros2_aruco_interfaces::msg::ArucoMarkers>(
+            "/aruco_markers", 10, std::bind(&DockingController::markerCallback, this, std::placeholders::_1));
 
-        // Subscribe to the planned path. The callback saves the latest path for use by the control loop.
-        path_subscriber = create_subscription<nav_msgs::msg::Path>(path_planner_node_name, 10, std::bind(&PDMotionPlanner::pathCallback, this, std::placeholders::_1));
+        target_marker_subscriber_ = create_subscription<std_msgs::msg::Int32>(
+            "/docking/target_marker_id", 10, std::bind(&DockingController::targetMarkerCallback, this, std::placeholders::_1));
 
-        // Publish velocity commands and the next selected target pose.
-        command_publisher = create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
-        next_pose_publisher = create_publisher<geometry_msgs::msg::PoseStamped>("/pd/next_pose", 10);
+        command_publisher_ = create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
+        dock_pose_publisher_ = create_publisher<geometry_msgs::msg::PoseStamped>("/docking/target_pose", 10);
+        docked_publisher_ = create_publisher<std_msgs::msg::Bool>("/docking/docked", rclcpp::QoS(1).transient_local());
 
-        // Initialize TF2 utilities for frame transforms.
-        tf_buffer = std::make_shared<tf2_ros::Buffer>(get_clock());
-        tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer);
+        tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+        tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-        // Create a periodic timer that calls the control loop at 10 Hz.
-        control_loop = create_wall_timer(std::chrono::milliseconds(100), std::bind(&PDMotionPlanner::controlLoop, this));
+        control_loop_ = create_wall_timer(std::chrono::milliseconds(100), std::bind(&DockingController::controlLoop, this));
 
-        // Last time the control loop was executed
-        last_cycle_time = get_clock()->now();
-        RCLCPP_INFO(get_logger(), "Setup Complete");
+        last_marker_seen_time_ = get_clock()->now();
+
+        RCLCPP_INFO(get_logger(), "Docking controller ready (target marker: %ld)", target_marker_id_);
     }
 
-    // Store the latest path received from the planner.
-    // This path is treated as the global reference trajectory until a new one arrives.
-    void PDMotionPlanner::pathCallback(const nav_msgs::msg::Path::SharedPtr path)
+    // Stores the standoff pose for the currently selected target marker whenever it's seen.
+    void DockingController::markerCallback(const ros2_aruco_interfaces::msg::ArucoMarkers::SharedPtr msg)
     {
-        RCLCPP_INFO(get_logger(), "Path Recieved");
-        global_plan = *path;
-    }
-
-    // Control loop executed on a fixed timer.
-    // It verifies path availability, queries the current robot pose, transforms the plan
-    // into the robot's current reference frame, and prepares for PD control computation.
-    void PDMotionPlanner::controlLoop()
-    {
-        // If no path has been received yet, skip this cycle.
-        if(global_plan.poses.empty())
+        if(target_marker_id_ < 0)
         {
-            // RCLCPP_INFO(get_logger(), "Path Not Recieved Yet");
             return;
         }
 
-        geometry_msgs::msg::TransformStamped robot_pose;
+        for(std::size_t i = 0; i < msg->marker_ids.size(); ++i)
+        {
+            if(msg->marker_ids[i] != target_marker_id_)
+            {
+                continue;
+            }
+
+            geometry_msgs::msg::PoseStamped marker_pose;
+            marker_pose.header = msg->header;
+            marker_pose.pose = msg->poses[i];
+
+            geometry_msgs::msg::PoseStamped marker_pose_odom;
+            try
+            {
+                auto transform = tf_buffer_->lookupTransform("odom", marker_pose.header.frame_id, tf2::TimePointZero);
+                tf2::doTransform(marker_pose, marker_pose_odom, transform);
+            }
+            catch(const tf2::TransformException & ex)
+            {
+                RCLCPP_WARN(get_logger(), "Could not transform marker pose into odom frame: %s", ex.what());
+                return;
+            }
+
+            // The marker's local Z axis points out of its face -- toward whoever is looking
+            // at it. Standing off along that axis (instead of straight-line from the robot)
+            // keeps the approach square to the marker regardless of the angle it was spotted from.
+            tf2::Quaternion marker_q;
+            tf2::fromMsg(marker_pose_odom.pose.orientation, marker_q);
+            tf2::Vector3 marker_normal = tf2::quatRotate(marker_q, tf2::Vector3(0, 0, 1));
+
+            target_pose_.header.frame_id = "odom";
+            target_pose_.pose.position.x = marker_pose_odom.pose.position.x + standoff_distance_ * marker_normal.x();
+            target_pose_.pose.position.y = marker_pose_odom.pose.position.y + standoff_distance_ * marker_normal.y();
+            target_pose_.pose.position.z = 0.0;
+
+            // Face back toward the marker from the standoff point.
+            double yaw = std::atan2(-marker_normal.y(), -marker_normal.x());
+            tf2::Quaternion target_q;
+            target_q.setRPY(0, 0, yaw);
+            target_pose_.pose.orientation = tf2::toMsg(target_q);
+
+            has_target_pose_ = true;
+            last_marker_seen_time_ = get_clock()->now();
+            dock_pose_publisher_->publish(target_pose_);
+            return;
+        }
+    }
+
+    // Lets an external mission sequencer switch which station's marker to dock to.
+    void DockingController::targetMarkerCallback(const std_msgs::msg::Int32::SharedPtr msg)
+    {
+        if(msg->data != target_marker_id_)
+        {
+            RCLCPP_INFO(get_logger(), "New docking target: marker ID %d", msg->data);
+            target_marker_id_ = msg->data;
+            has_target_pose_ = false;
+            docked_ = false;
+            locked_rotation_sign_ = 0;
+        }
+    }
+
+    void DockingController::controlLoop()
+    {
+        if(target_marker_id_ < 0 || docked_)
+        {
+            return;
+        }
+
+        if(!has_target_pose_ || (get_clock()->now() - last_marker_seen_time_).seconds() > marker_timeout_)
+        {
+            // Haven't seen the target marker recently enough to trust its pose -- hold
+            // still rather than drive on stale or nonexistent data.
+            command_publisher_->publish(geometry_msgs::msg::Twist());
+            return;
+        }
+
+        geometry_msgs::msg::TransformStamped robot_transform;
         try
         {
-            // Obtain the current transform from the odom frame to the robot base.
-            robot_pose = tf_buffer->lookupTransform("odom", "base_footprint", tf2::TimePointZero);
+            robot_transform = tf_buffer_->lookupTransform("odom", "base_footprint", tf2::TimePointZero);
         }
-        catch(tf2::TransformException & ex)
+        catch(const tf2::TransformException & ex)
         {
             RCLCPP_WARN(get_logger(), "Could not transform: %s", ex.what());
             return;
         }
 
-        // Convert the received global plan into the robot's current frame so a controller
-        // can compute commands relative to the robot's position and orientation.
-        if(!transformPlan(robot_pose.header.frame_id))
-        {
-            RCLCPP_ERROR(get_logger(), "Unable to transform Plan into robot's frame.");
-            return;
-        }
+        geometry_msgs::msg::PoseStamped robot_pose;
+        robot_pose.header.frame_id = robot_transform.header.frame_id;
+        robot_pose.pose.position.x = robot_transform.transform.translation.x;
+        robot_pose.pose.position.y = robot_transform.transform.translation.y;
+        robot_pose.pose.orientation = robot_transform.transform.rotation;
 
-        geometry_msgs::msg::PoseStamped robot_pose_stamped;
-        // Tie robot pose stamped to robot pose frame
-        robot_pose_stamped.header.frame_id = robot_pose.header.frame_id;
-        robot_pose_stamped.pose.position.x = robot_pose.transform.translation.x;
-        robot_pose_stamped.pose.position.y = robot_pose.transform.translation.y;
-        robot_pose_stamped.pose.orientation = robot_pose.transform.rotation;
-
-        // Takes in as input current pose of the robot
-        auto next_pose = getNextPose(robot_pose_stamped);
-
-        // Check if we reached the goal
-        double dx = next_pose.pose.position.x - robot_pose_stamped.pose.position.x;
-        double dy = next_pose.pose.position.y - robot_pose_stamped.pose.position.y;
-        // Calculate distance of each pose
+        double dx = target_pose_.pose.position.x - robot_pose.pose.position.x;
+        double dy = target_pose_.pose.position.y - robot_pose.pose.position.y;
         double distance = std::sqrt(dx * dx + dy * dy);
-        // Did we reach goal
-        if(distance <= 0.1)
+
+        if(distance <= position_tolerance_)
         {
-            // Reached Goal Pose
-            RCLCPP_INFO(get_logger(), "Goal Reached!");
-            global_plan.poses.clear();
+            // Position reached -- now square up to the marker's facing before declaring docked.
+            double goal_yaw = tf2::getYaw(target_pose_.pose.orientation);
+            double robot_yaw = tf2::getYaw(robot_pose.pose.orientation);
+            double yaw_error = std::atan2(std::sin(goal_yaw - robot_yaw), std::cos(goal_yaw - robot_yaw));
+
+            if(std::abs(yaw_error) <= goal_yaw_tolerance_)
+            {
+                RCLCPP_INFO(get_logger(), "Docked at marker %ld", target_marker_id_);
+                docked_ = true;
+                locked_rotation_sign_ = 0;
+                command_publisher_->publish(geometry_msgs::msg::Twist());
+
+                std_msgs::msg::Bool docked_msg;
+                docked_msg.data = true;
+                docked_publisher_->publish(docked_msg);
+                return;
+            }
+
+            if(locked_rotation_sign_ == 0)
+            {
+                locked_rotation_sign_ = (yaw_error > 0) ? 1 : -1;
+            }
+
+            geometry_msgs::msg::Twist cmd_vel;
+            cmd_vel.angular.z = locked_rotation_sign_ * maximum_angular_velocity_;
+            command_publisher_->publish(cmd_vel);
             return;
         }
 
-        // Publish next pose
-        next_pose_publisher->publish(next_pose);
+        tf2::Transform robot_tf, target_tf, target_robot_tf;
+        tf2::fromMsg(robot_pose.pose, robot_tf);
+        tf2::fromMsg(target_pose_.pose, target_tf);
+        target_robot_tf = robot_tf.inverse() * target_tf;
 
-        // Get the error of next pose and robot pose
-        tf2::Transform robot_tf, next_pose_tf, next_pose_robot_tf;
-        tf2::fromMsg(robot_pose_stamped.pose, robot_tf);
-        tf2::fromMsg(next_pose.pose, next_pose_tf);
-        // Gets the error of the pose of the robot and the next pose we want to reach
-        next_pose_robot_tf = robot_tf.inverse() * next_pose_tf;
-        double linear_error = next_pose_robot_tf.getOrigin().getX();
-        double angular_error = next_pose_robot_tf.getOrigin().getY();
+        double heading_error = std::atan2(target_robot_tf.getOrigin().getY(), target_robot_tf.getOrigin().getX());
 
-        // grab cycle time for error 
-        double dt = (get_clock()->now() - last_cycle_time).seconds();
-        double linear_error_derivative = (linear_error - previous_linear_error) / dt;
-        double angular_error_derivative = (angular_error - previous_angular_error) / dt;
-
-        // Calculate Proportional and Differential Control
         geometry_msgs::msg::Twist cmd_vel;
-        cmd_vel.linear.x = std::clamp(k_prop * linear_error + k_diff * linear_error_derivative, -maximum_linear_velocity, maximum_linear_velocity);
-        cmd_vel.angular.z = std::clamp(k_prop * angular_error + k_diff * angular_error_derivative, -maximum_angular_velocity, maximum_angular_velocity);
-
-        // Publish vel cmd
-        command_publisher->publish(cmd_vel);
-        // RCLCPP_INFO(get_logger(), "Published CMD VEL going next loop");
-        last_cycle_time = get_clock()->now();
-        previous_linear_error = linear_error;
-        previous_angular_error = angular_error;
-    }
-
-    // Transform the stored plan into the requested coordinate frame.
-    // This rewrites each pose so the global path is expressed relative to the robot's current frame.
-    bool PDMotionPlanner::transformPlan(const std::string & frame)
-    {
-        if(global_plan.header.frame_id == frame)
+        if(std::abs(heading_error) > heading_error_threshold_)
         {
-            return true;
-        }
-
-        geometry_msgs::msg::TransformStamped transform;
-        try
-        {
-            transform = tf_buffer->lookupTransform(frame, global_plan.header.frame_id, tf2::TimePointZero);
-        }
-        catch(tf2::LookupException & ex)
-        {
-            RCLCPP_ERROR_STREAM(get_logger(), "Couldn't transform plan from frame " << global_plan.header.frame_id << " to " << frame);
-            return false;
-        }
-
-        for(auto & pose : global_plan.poses)
-        {
-            // Transform each path pose into the target frame.
-            tf2::doTransform(pose, pose, transform);
-        }
-
-        global_plan.header.frame_id = frame;
-        return true;
-    }
-
-    geometry_msgs::msg::PoseStamped PDMotionPlanner::getNextPose(const geometry_msgs::msg::PoseStamped & robot_pose)
-    {
-        // Init next pose we want to reach (IE Last Pose on the global plan)
-        auto next_pose = global_plan.poses.back();
-        // Iterate throug the poses and find the pose that less than the step size (in reverse)
-        for(auto pose_it = global_plan.poses.rbegin(); pose_it != global_plan.poses.rend(); ++pose_it)
-        {
-            double dx = pose_it->pose.position.x - robot_pose.pose.position.x;
-            double dy = pose_it->pose.position.y - robot_pose.pose.position.y;
-            // Calculate distance of each pose
-            double distance = std::sqrt(dx * dx + dy * dy);
-            // Find pose less than step size
-            if(distance > step_size)
+            // Target is well off to the side or behind the robot -- rotate in place toward
+            // it first, locking the direction so noise near the +-pi boundary can't flip
+            // it back and forth (same fix pure_pursuit needed for the same reason).
+            if(locked_rotation_sign_ == 0)
             {
-                // If bigger than step size
-                next_pose = *pose_it;
-                // Continue
+                locked_rotation_sign_ = (heading_error > 0) ? 1 : -1;
             }
-            else
-            {
-                // Found the pose
-                break;
-            }
+            cmd_vel.angular.z = locked_rotation_sign_ * maximum_angular_velocity_;
         }
-        return next_pose;
+        else
+        {
+            locked_rotation_sign_ = 0;
+            cmd_vel.linear.x = std::clamp(k_prop_linear_ * distance, 0.0, maximum_linear_velocity_);
+            cmd_vel.angular.z = std::clamp(k_prop_angular_ * heading_error, -maximum_angular_velocity_, maximum_angular_velocity_);
+        }
+
+        command_publisher_->publish(cmd_vel);
     }
 }
 
 int main(int argc, char **argv)
 {
-    // Initialize the ROS 2 client library before creating the node.
     rclcpp::init(argc, argv);
 
-    // Create the PD motion planner node and keep it alive while ROS is running.
-    auto node = std::make_shared<bumperbot_motion::PDMotionPlanner>();
+    auto node = std::make_shared<bumperbot_motion::DockingController>();
     rclcpp::spin(node);
 
-    // Cleanly shutdown ROS2 resources after node exit.
     rclcpp::shutdown();
     return 0;
 }

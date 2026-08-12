@@ -39,6 +39,7 @@ install(
 
 install(PROGRAMS
   ${PROJECT_NAME}/mapping_with_known_poses.py
+  ${PROJECT_NAME}/station_recorder.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -10,10 +10,17 @@ def generate_launch_description():
 
     use_sim_time = LaunchConfiguration("use_sim_time")
     planner_config = LaunchConfiguration("planner_config")
+    map_name = LaunchConfiguration("map_name")
 
     use_sim_time_arg = DeclareLaunchArgument(
         "use_sim_time",
         default_value="false"
+    )
+
+    map_name_arg = DeclareLaunchArgument(
+        "map_name",
+        default_value="bedroom",
+        description="Name of the saved map being localized against -- mission_commander loads this map's stations.yaml"
     )
 
     planner_config_arg = DeclareLaunchArgument(
@@ -97,13 +104,26 @@ def generate_launch_description():
         ],
     )
 
+    mission_commander = Node(
+        package="bumperbot_motion",
+        executable="mission_commander.py",
+        name="mission_commander_node",
+        output="screen",
+        parameters=[
+            {"map_name": map_name},
+            {"use_sim_time": use_sim_time},
+        ],
+    )
+
     return LaunchDescription([
         use_sim_time_arg,
         planner_config_arg,
         costmap_config_arg,
+        map_name_arg,
         planner_server,
         local_costmap_node,
         lifecycle_manager,
         pure_pursuit,
         waypoint_commander,
+        mission_commander,
     ])

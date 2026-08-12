@@ -10,6 +10,7 @@ def generate_launch_description():
 
     use_sim_time = LaunchConfiguration("use_sim_time")
     slam_config = LaunchConfiguration("slam_config")
+    map_name = LaunchConfiguration("map_name")
 
     ros_distro = os.environ["ROS_DISTRO"]
     lifecycle_nodes = ["map_saver_server"]
@@ -30,7 +31,24 @@ def generate_launch_description():
         ),
         description="Full path to slam yaml file to load"
     )
-    
+
+    map_name_arg = DeclareLaunchArgument(
+        "map_name",
+        default_value="bedroom",
+        description="Name of the map being built -- station_recorder saves stations.yaml under this map's folder"
+    )
+
+    station_recorder = Node(
+        package="bumperbot_mapping",
+        executable="station_recorder.py",
+        name="station_recorder_node",
+        output="screen",
+        parameters=[
+            {"map_name": map_name},
+            {"use_sim_time": use_sim_time},
+        ],
+    )
+
     nav2_map_saver = Node(
         package="nav2_map_server",
         executable="map_saver_server",
@@ -71,7 +89,9 @@ def generate_launch_description():
     return LaunchDescription([
         use_sim_time_arg,
         slam_config_arg,
+        map_name_arg,
         nav2_map_saver,
         slam_toolbox,
         nav2_lifecycle_manager,
+        station_recorder,
     ])

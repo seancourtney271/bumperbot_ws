@@ -94,6 +94,7 @@ def generate_launch_description():
             "navigation.launch.py"
         ),
         launch_arguments={
+            "map_name": map_name,
             "use_sim_time": "False"
         }.items(),
         condition=UnlessCondition(use_slam)
@@ -106,6 +107,7 @@ def generate_launch_description():
             "slam.launch.py"
         ),
         launch_arguments={
+            "map_name": map_name,
             "use_sim_time": "False"
         }.items(),
         condition=IfCondition(use_slam)

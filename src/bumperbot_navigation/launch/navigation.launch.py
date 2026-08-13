@@ -76,9 +76,11 @@ def generate_launch_description():
             {"use_sim_time": use_sim_time},
             {"autostart": True},
             # This Pi has repeatedly shown slow lifecycle service responses under
-            # startup CPU load (see slam_toolbox/map_server history) -- give the
-            # bond more room than the 4s default before treating it as dead.
-            {"bond_timeout": 10.0},
+            # startup CPU load (see slam_toolbox/map_server history). That got worse
+            # once usb_cam/aruco_node started running continuously alongside
+            # ros2_control/EKF -- 10s wasn't enough anymore and bringup was aborting
+            # outright ("unable to be reached after 10.00s by bond").
+            {"bond_timeout": 30.0},
         ],
     )
 

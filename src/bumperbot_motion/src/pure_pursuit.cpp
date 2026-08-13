@@ -49,6 +49,7 @@ namespace bumperbot_motion
         // Publish velocity commands and the next selected target pose.
         command_publisher = create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
         carrot_pose_publisher = create_publisher<geometry_msgs::msg::PoseStamped>("/purepursuit/carrot", 10);
+        goal_reached_publisher_ = create_publisher<std_msgs::msg::Bool>("/purepursuit/goal_reached", 10);
 
         // Initialize TF2 utilities for frame transforms.
         tf_buffer = std::make_shared<tf2_ros::Buffer>(get_clock());
@@ -141,6 +142,9 @@ namespace bumperbot_motion
                 RCLCPP_INFO(get_logger(), "Goal Reached!");
                 global_plan.poses.clear();
                 locked_rotation_sign = 0;
+                std_msgs::msg::Bool goal_reached_msg;
+                goal_reached_msg.data = true;
+                goal_reached_publisher_->publish(goal_reached_msg);
                 return;
             }
 

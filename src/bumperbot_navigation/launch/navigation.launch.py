@@ -117,6 +117,19 @@ def generate_launch_description():
         ],
     )
 
+    docking_controller = Node(
+        package="bumperbot_motion",
+        executable="docking_controller",
+        name="docking_controller_node",
+        output="screen",
+        parameters=[
+            # 1 foot -- the final precision stop distance in front of the marker,
+            # once mission_commander hands off from coarse navigation to docking.
+            {"standoff_distance": 0.3048},
+            {"use_sim_time": use_sim_time},
+        ],
+    )
+
     return LaunchDescription([
         use_sim_time_arg,
         planner_config_arg,
@@ -128,4 +141,5 @@ def generate_launch_description():
         pure_pursuit,
         waypoint_commander,
         mission_commander,
+        docking_controller,
     ])

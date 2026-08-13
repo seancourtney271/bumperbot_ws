@@ -3,6 +3,7 @@
 #include "nav_msgs/msg/occupancy_grid.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "tf2_ros/buffer.hpp"
 #include "tf2_ros/transform_listener.hpp"
 
@@ -21,6 +22,10 @@ namespace bumperbot_motion
             // Publishes the command to the wheels
             rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr command_publisher;
             rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr carrot_pose_publisher;
+            // Fires once per completed goal so other nodes (e.g. mission_commander) can
+            // react to arrival -- otherwise "reached the goal" only ever existed as a
+            // log line, with nothing else in the system able to observe it.
+            rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr goal_reached_publisher_;
 
             std::shared_ptr<tf2_ros::Buffer> tf_buffer;
             std::shared_ptr<tf2_ros::TransformListener> tf_listener;

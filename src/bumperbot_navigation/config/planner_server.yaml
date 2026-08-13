@@ -49,4 +49,8 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         inflation_radius: 0.2
-        cost_scaling_factor: 3.0
+        # With cost_scaling_factor 3.0, cost at the edge of the 0.2m inflation_radius was
+        # still ~186 -- above DijkstraPlanner's cost<99 traversability threshold the whole
+        # way out, so nearly anything within 0.2m of a wall was a hard wall to it, not just
+        # costly. A steeper falloff gets cost below 99 well inside the radius instead.
+        cost_scaling_factor: 10.0

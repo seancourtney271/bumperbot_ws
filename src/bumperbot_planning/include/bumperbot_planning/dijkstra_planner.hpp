@@ -16,10 +16,12 @@ namespace bumperbot_planning
     {
         int x = 0;
         int y = 0;
-        int cost = 0;
+        // Fractional so diagonal steps (~1.41) can be weighted differently than
+        // orthogonal ones (1.0) -- see explore_directions in dijkstra_planner.cpp.
+        double cost = 0.0;
         std::shared_ptr<GraphNode> prev;
 
-        GraphNode(int in_x, int in_y) : x(in_x), y(in_y), cost(0)
+        GraphNode(int in_x, int in_y) : x(in_x), y(in_y), cost(0.0)
         {
         }
 

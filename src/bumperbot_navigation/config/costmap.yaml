@@ -10,6 +10,16 @@ local_costmap:
       use_sim_time: false
       robot_radius: 0.1
       resolution: 0.05
+      # Without a rolling window, this costmap defaults to covering the *entire*
+      # static map (confirmed in logs: "StaticLayer: Resizing costmap to 313 X 284"),
+      # recomputed at 5Hz. That was cheap on the small single-room test map, but on
+      # a much larger map it was expensive enough to starve the node's own lifecycle
+      # bond heartbeat, causing "CRITICAL FAILURE: SERVER local_costmap/local_costmap
+      # IS DOWN" and a full navigation shutdown mid-session. A local costmap only
+      # ever needs to cover the area immediately around the robot.
+      rolling_window: true
+      width: 3.0
+      height: 3.0
       always_send_full_costmap: true
       # Same reasoning as the global costmap (planner_server.yaml) -- DijkstraPlanner
       # treats unknown cells as impassable, so keep this consistent between the two.

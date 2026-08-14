@@ -25,7 +25,7 @@ class StationRecorder(Node):
     def __init__(self):
         super().__init__("station_recorder_node")
 
-        self.declare_parameter("map_name", "bedroom")
+        self.declare_parameter("map_name", "demo")
         self.declare_parameter("known_marker_ids", [0, 1])
         self.declare_parameter("standoff_distance", 0.5)
         self.map_name = self.get_parameter("map_name").value

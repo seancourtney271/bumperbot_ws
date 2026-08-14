@@ -35,8 +35,17 @@ namespace bumperbot_planning
         const geometry_msgs::msg::PoseStamped & goal, 
         std::function<bool()>)
     {
-        //Potential Directions to explore
-        std::vector<std::pair<int, int>> explore_directions = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+        //Potential Directions to explore, paired with their per-step cost. Orthogonal-only
+        // search made every path "staircase" toward diagonal goals (a run of 90-degree grid
+        // steps), which fed pure_pursuit a stream of large heading errors and made it stop
+        // and rotate in place constantly. Diagonal moves cost sqrt(2) instead of 1 (their
+        // true relative distance), so Dijkstra still finds the genuinely shortest path --
+        // it just now has a smooth diagonal option instead of only zigzagging.
+        static constexpr double kDiagonalCost = 1.4142135623730951;
+        std::vector<std::tuple<int, int, double>> explore_directions = {
+            {-1, 0, 1.0}, {1, 0, 1.0}, {0, -1, 1.0}, {0, 1, 1.0},
+            {-1, -1, kDiagonalCost}, {-1, 1, kDiagonalCost}, {1, -1, kDiagonalCost}, {1, 1, kDiagonalCost}
+        };
 
         // Nodes not yet processed
         std::priority_queue<GraphNode, std::vector<GraphNode>, std::greater<GraphNode>> pending_nodes;
@@ -55,17 +64,17 @@ namespace bumperbot_planning
                 break;
             }
 
-            for(const auto & dir : explore_directions)
+            for(const auto & [dx, dy, step_cost] : explore_directions)
             {
                 // Get Neighbor
-                GraphNode new_node = active_node + dir;
+                GraphNode new_node = active_node + std::make_pair(dx, dy);
                 // Check if already visited and is within the map and the new nodes location exists
-                if((std::find(visited_nodes.begin(), visited_nodes.end(), new_node) == visited_nodes.end()) && poseOnMap(new_node) && 
+                if((std::find(visited_nodes.begin(), visited_nodes.end(), new_node) == visited_nodes.end()) && poseOnMap(new_node) &&
                 // Cells that are less than 99 and >= 0 for being ok cells
                 costmap_->getCost(new_node.x, new_node.y) < 99)
                 {
                     // Calculate Node cost
-                    new_node.cost = active_node.cost + 1 + costmap_->getCost(new_node.x, new_node.y);
+                    new_node.cost = active_node.cost + step_cost + costmap_->getCost(new_node.x, new_node.y);
                     // Assigned previous node
                     new_node.prev = std::make_shared<GraphNode>(active_node);
                     pending_nodes.push(new_node);

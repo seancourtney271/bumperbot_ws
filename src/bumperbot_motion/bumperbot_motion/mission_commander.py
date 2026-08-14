@@ -57,8 +57,11 @@ class MissionCommander(Node):
         self.publish_markers()
 
         if self.default_station_id in self.stations:
-            # Give TF/localization a moment to settle before sending the first goal.
-            self.startup_timer = self.create_timer(2.0, self.send_default_goal)
+            # Give TF/localization and the planner_server/local_costmap lifecycle
+            # bringup a moment to settle before sending the first goal -- 2s wasn't
+            # enough once the camera pipeline made lifecycle bringup slower ("Action
+            # server is inactive. Rejecting the goal." on the very first attempt).
+            self.startup_timer = self.create_timer(8.0, self.send_default_goal)
         else:
             self.get_logger().warn(
                 f"Default station {self.default_station_id} not found in stations.yaml -- "

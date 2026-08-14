@@ -18,8 +18,11 @@ local_costmap:
       # IS DOWN" and a full navigation shutdown mid-session. A local costmap only
       # ever needs to cover the area immediately around the robot.
       rolling_window: true
-      width: 3.0
-      height: 3.0
+      # nav2_costmap_2d declares these as integer parameters (not double) -- a "3.0"
+      # here throws rclcpp::exceptions::InvalidParameterTypeException and crashes the
+      # node outright on startup (confirmed: local_costmap_node exit code -6, SIGABRT).
+      width: 3
+      height: 3
       always_send_full_costmap: true
       # Same reasoning as the global costmap (planner_server.yaml) -- DijkstraPlanner
       # treats unknown cells as impassable, so keep this consistent between the two.

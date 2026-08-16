@@ -73,4 +73,4 @@ ros2 topic pub -1 /initialpose geometry_msgs/msg/PoseWithCovarianceStamped "{hea
 
 
 Step 5 — command it to the other station:
-ros2 topic pub /mission/goto_station std_msgs/msg/Int32 "{data: 1}" --once
+ros2 topic pub /mission/goto_station std_msgs/msg/Int32 "{data: 0}" --once

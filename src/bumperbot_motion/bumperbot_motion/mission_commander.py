@@ -15,23 +15,20 @@ from tf_transformations import quaternion_from_euler
 
 
 # Loads the station positions recorded by station_recorder for the current map,
-# shows them in Foxglove, sends the robot to a default station on startup, and
-# re-sends it to a different station whenever a marker ID is published on
-# /mission/goto_station -- reuses the existing /goal_pose -> waypoint_commander
-# -> planner_server -> pure_pursuit pipeline for the coarse navigation. Once
-# pure_pursuit reports the coarse goal reached, hands off to docking_controller
-# (via /docking/target_marker_id) for the precise, marker-based final approach --
-# station IDs and marker IDs are the same number by convention, so no lookup
-# table is needed.
+# shows them in Foxglove, and waits idle until commanded (via /mission/goto_station)
+# before sending the robot anywhere -- reuses the existing /goal_pose ->
+# waypoint_commander -> planner_server -> pure_pursuit pipeline for the coarse
+# navigation. Once pure_pursuit reports the coarse goal reached, hands off to
+# docking_controller (via /docking/target_marker_id) for the precise, marker-based
+# final approach -- station IDs and marker IDs are the same number by convention,
+# so no lookup table is needed.
 class MissionCommander(Node):
     def __init__(self):
         super().__init__("mission_commander_node")
 
         self.declare_parameter("map_name", "bedroom")
-        self.declare_parameter("default_station_id", 0)
 
         self.map_name = self.get_parameter("map_name").value
-        self.default_station_id = self.get_parameter("default_station_id").value
 
         self.stations = self.load_stations()
         # Station id currently being navigated to (coarse leg), or None once docking
@@ -56,16 +53,9 @@ class MissionCommander(Node):
 
         self.publish_markers()
 
-        if self.default_station_id in self.stations:
-            # Give TF/localization and the planner_server/local_costmap lifecycle
-            # bringup a moment to settle before sending the first goal -- 2s wasn't
-            # enough once the camera pipeline made lifecycle bringup slower ("Action
-            # server is inactive. Rejecting the goal." on the very first attempt).
-            self.startup_timer = self.create_timer(8.0, self.send_default_goal)
-        else:
-            self.get_logger().warn(
-                f"Default station {self.default_station_id} not found in stations.yaml -- "
-                "waiting for a /mission/goto_station command instead.")
+        self.get_logger().info(
+            f"Mission commander ready for map '{self.map_name}' -- waiting for a "
+            "/mission/goto_station command.")
 
     def load_stations(self):
         stations_path = os.path.join(
@@ -81,10 +71,6 @@ class MissionCommander(Node):
             data = yaml.safe_load(f) or {}
 
         return {int(k): v for k, v in (data.get("stations") or {}).items()}
-
-    def send_default_goal(self):
-        self.startup_timer.cancel()
-        self.go_to_station(self.default_station_id)
 
     def goto_station_callback(self, msg: Int32):
         self.go_to_station(msg.data)

@@ -136,10 +136,9 @@ namespace bumperbot_motion
             return;
         }
 
-        if(!has_target_pose_ || (get_clock()->now() - last_marker_seen_time_).seconds() > marker_timeout_)
+        if(!has_target_pose_)
         {
-            // Haven't seen the target marker recently enough to trust its pose -- hold
-            // still rather than drive on stale or nonexistent data.
+            // Never seen the target marker at all yet -- nothing to do.
             command_publisher_->publish(geometry_msgs::msg::Twist());
             return;
         }
@@ -193,6 +192,19 @@ namespace bumperbot_motion
             geometry_msgs::msg::Twist cmd_vel;
             cmd_vel.angular.z = locked_rotation_sign_ * maximum_angular_velocity_;
             command_publisher_->publish(cmd_vel);
+            return;
+        }
+
+        // Still approaching -- require a reasonably fresh sighting before continuing to
+        // drive, since this leg still relies on the marker to confirm the approach is
+        // still valid. (The final in-place alignment above intentionally skips this check:
+        // a webcam's narrow field of view very easily loses the marker mid-rotation, and
+        // requiring continued visibility there just left the robot frozen mid-turn instead
+        // of finishing the square-up -- it doesn't need a fresh sighting to complete a
+        // rotation toward a target it already locked in.)
+        if((get_clock()->now() - last_marker_seen_time_).seconds() > marker_timeout_)
+        {
+            command_publisher_->publish(geometry_msgs::msg::Twist());
             return;
         }
 

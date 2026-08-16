@@ -2,9 +2,12 @@ local_costmap:
   local_costmap:
     ros__parameters:
       # Faster than the global costmap's 1.0 Hz -- this feeds real-time obstacle
-      # stopping in pure_pursuit, so it needs to notice new obstacles quickly.
-      update_frequency: 5.0
-      publish_frequency: 5.0
+      # stopping in pure_pursuit, so it needs to notice new obstacles quickly. Dropped
+      # from 5.0: even with rolling_window scoping this down to a small window, the Pi
+      # is still overloaded enough overall (camera/aruco/EKF/ros2_control all competing)
+      # that this node was repeatedly missing its own lifecycle bond heartbeat.
+      update_frequency: 3.0
+      publish_frequency: 3.0
       global_frame: map
       robot_base_frame: base_footprint
       use_sim_time: false

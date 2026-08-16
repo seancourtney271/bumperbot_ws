@@ -78,9 +78,10 @@ def generate_launch_description():
             # This Pi has repeatedly shown slow lifecycle service responses under
             # startup CPU load (see slam_toolbox/map_server history). That got worse
             # once usb_cam/aruco_node started running continuously alongside
-            # ros2_control/EKF -- 10s wasn't enough anymore and bringup was aborting
-            # outright ("unable to be reached after 10.00s by bond").
-            {"bond_timeout": 30.0},
+            # ros2_control/EKF -- even after scoping local_costmap down with
+            # rolling_window and dropping its update rate, the Pi is still overloaded
+            # enough overall to occasionally miss a 30s heartbeat window mid-session.
+            {"bond_timeout": 60.0},
         ],
     )
 

@@ -45,27 +45,27 @@ DEMO COMMANDS
 
 
 Step 1 — map + record stations:
-ros2 launch bumperbot_bringup real_robot.launch.py use_slam:=true map_name:=house
+ros2 launch bumperbot_bringup real_robot.launch.py use_slam:=true map_name:=demo
 
 
 Drive around to build the map, making sure to pass in front of both markers (ID 0 and ID 1). Check progress anytime with:
 
 
 Step 2a -- Make Save Folder
-mkdir -p ~/bumperbot_ws/src/bumperbot_mapping/maps/house
+mkdir -p ~/bumperbot_ws/src/bumperbot_mapping/maps/demo
 
 Step 2 — save the recorded station positions:
-ros2 service call /save_stations std_srvs/srv/Trigger map_name:=house
+ros2 service call /save_stations std_srvs/srv/Trigger map_name:=demo
 
 
 Step 3 — save the map itself, into the same install path stations.yaml just used:
-ros2 service call /map_saver_server/save_map nav2_msgs/srv/SaveMap "{map_topic: map, map_url: '/home/seancour/bumperbot_ws/src/bumperbot_mapping/maps/house/map', image_format: pgm, map_mode: trinary, free_thresh: 0.25, occupied_thresh: 0.65}"
+ros2 service call /map_saver_server/save_map nav2_msgs/srv/SaveMap "{map_topic: map, map_url: '/home/seancour/bumperbot_ws/src/bumperbot_mapping/maps/demo/map', image_format: pgm, map_mode: trinary, free_thresh: 0.25, occupied_thresh: 0.65}"
 
 Step 3B - Build map
 colcon build --packages-select bumperbot_mapping
 
 Step 4 — Ctrl+C, then bring up localization + the station-to-station demo:
-ros2 launch bumperbot_bringup real_robot.launch.py use_slam:=false map_name:=house
+ros2 launch bumperbot_bringup real_robot.launch.py use_slam:=false map_name:=demo
 
 
 Set the robot's initial pose via /initialpose in Foxglove/RViz like before. A couple seconds after startup, mission_commander will automatically send it to Station A (marker 0).

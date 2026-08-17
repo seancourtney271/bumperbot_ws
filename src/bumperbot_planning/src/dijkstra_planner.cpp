@@ -31,9 +31,9 @@ namespace bumperbot_planning
     }
 
     nav_msgs::msg::Path DijkstraPlanner::createPlan(
-        const geometry_msgs::msg::PoseStamped & start, 
-        const geometry_msgs::msg::PoseStamped & goal, 
-        std::function<bool()>)
+        const geometry_msgs::msg::PoseStamped & start,
+        const geometry_msgs::msg::PoseStamped & goal,
+        std::function<bool()> cancel_checker)
     {
         //Potential Directions to explore, paired with their per-step cost. Orthogonal-only
         // search made every path "staircase" toward diagonal goals (a run of 90-degree grid
@@ -49,13 +49,32 @@ namespace bumperbot_planning
 
         // Nodes not yet processed
         std::priority_queue<GraphNode, std::vector<GraphNode>, std::greater<GraphNode>> pending_nodes;
-        // Nodes that are processed
-        std::vector<GraphNode> visited_nodes;
+        // Nodes that are processed. A flat per-cell flag gives an O(1) membership
+        // check -- the previous std::vector<GraphNode> + std::find was O(V) per
+        // check, so on the full-size global costmap (hundreds of thousands of
+        // cells) the search degenerated to roughly O(V^2), taking so long that
+        // nav2's action server would try (and fail) to cancel/preempt it long
+        // before createPlan ever returned.
+        std::vector<bool> visited_cells(costmap_->getSizeInCellsX() * costmap_->getSizeInCellsY(), false);
 
         pending_nodes.push(worldToGrid(start.pose));
         GraphNode active_node;
+        std::size_t iterations_since_cancel_check = 0;
         while(!pending_nodes.empty() && rclcpp::ok())
         {
+            // Checking every iteration would add lock/condvar overhead per node
+            // expanded; checking periodically still lets a cancelled/superseded
+            // goal bail out quickly instead of running the search to exhaustion.
+            if(++iterations_since_cancel_check >= 200)
+            {
+                iterations_since_cancel_check = 0;
+                if(cancel_checker())
+                {
+                    RCLCPP_INFO(node_->get_logger(), "DijkstraPlanner: goal cancelled/superseded, aborting search");
+                    return nav_msgs::msg::Path();
+                }
+            }
+
             active_node = pending_nodes.top();
             pending_nodes.pop();
 
@@ -68,8 +87,8 @@ namespace bumperbot_planning
             {
                 // Get Neighbor
                 GraphNode new_node = active_node + std::make_pair(dx, dy);
-                // Check if already visited and is within the map and the new nodes location exists
-                if((std::find(visited_nodes.begin(), visited_nodes.end(), new_node) == visited_nodes.end()) && poseOnMap(new_node) &&
+                // Check if within the map, not already visited, and the new nodes location exists
+                if(poseOnMap(new_node) && !visited_cells[poseToCell(new_node)] &&
                 // Cells that are less than 99 and >= 0 for being ok cells
                 costmap_->getCost(new_node.x, new_node.y) < 99)
                 {
@@ -78,7 +97,7 @@ namespace bumperbot_planning
                     // Assigned previous node
                     new_node.prev = std::make_shared<GraphNode>(active_node);
                     pending_nodes.push(new_node);
-                    visited_nodes.push_back(new_node);
+                    visited_cells[poseToCell(new_node)] = true;
                 }
             }
         }

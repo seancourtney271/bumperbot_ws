@@ -11,7 +11,8 @@ namespace bumperbot_motion
     // The node receives a global path, transforms it into the robot's current frame,
     // and will eventually produce velocity commands based on a PD control law.
     PurePursuit::PurePursuit() : Node("pure_pursuit_planner_node"),
-        look_ahead_distance(0.5), maximum_linear_velocity(0.3), maximum_angular_velocity(1.0), path_planner_node_name("/astar/path"), current_plan_index(0), locked_rotation_sign(0)
+        look_ahead_distance(0.5), maximum_linear_velocity(0.3), maximum_angular_velocity(1.0), path_planner_node_name("/astar/path"), current_plan_index(0), locked_rotation_sign(0),
+        is_currently_blocked(false)
     {
         // Declare configurable ROS2 parameters with default values.
         declare_parameter<double>("look_ahead_distance", look_ahead_distance);  // the distance to plan path to ahead
@@ -24,6 +25,7 @@ namespace bumperbot_motion
         declare_parameter<std::string>("costmap_topic", "/local_costmap/costmap");
         declare_parameter<int>("occupied_threshold", 90);
         declare_parameter<double>("heading_error_threshold", 0.5);
+        declare_parameter<double>("stuck_timeout", 5.0);
 
         // Load parameter values after declaration so runtime overrides take effect.
         look_ahead_distance = get_parameter("look_ahead_distance").as_double();
@@ -33,6 +35,7 @@ namespace bumperbot_motion
         std::string costmap_topic = get_parameter("costmap_topic").as_string();
         occupied_threshold = get_parameter("occupied_threshold").as_int();
         heading_error_threshold = get_parameter("heading_error_threshold").as_double();
+        stuck_timeout = get_parameter("stuck_timeout").as_double();
 
         // Subscribe to the planned path. The callback saves the latest path for use by the control loop.
         path_subscriber = create_subscription<nav_msgs::msg::Path>(path_planner_node_name, 10, std::bind(&PurePursuit::pathCallback, this, std::placeholders::_1));
@@ -67,6 +70,7 @@ namespace bumperbot_motion
         global_plan = *path;
         current_plan_index = 0;
         locked_rotation_sign = 0;
+        is_currently_blocked = false;
     }
 
     // Store the latest costmap for use by isPoseInCollision().
@@ -151,10 +155,32 @@ namespace bumperbot_motion
         // frame here, before it gets rewritten into the robot-relative frame below).
         if(isPoseInCollision(look_ahead_pose))
         {
+            if(!is_currently_blocked)
+            {
+                is_currently_blocked = true;
+                blocked_start_time = get_clock()->now();
+            }
+
+            double blocked_duration = (get_clock()->now() - blocked_start_time).seconds();
+            if(blocked_duration > stuck_timeout)
+            {
+                // The same look-ahead point has stayed blocked for too long -- nothing
+                // about this situation is going to resolve itself by waiting (see the
+                // comment on stuck_timeout in the header), so give up on this path
+                // instead of jittering here forever.
+                RCLCPP_ERROR(get_logger(), "Blocked by an obstacle for over %.1f seconds -- giving up on this path.", stuck_timeout);
+                global_plan.poses.clear();
+                locked_rotation_sign = 0;
+                is_currently_blocked = false;
+                command_publisher->publish(geometry_msgs::msg::Twist());
+                return;
+            }
+
             RCLCPP_WARN(get_logger(), "Obstacle detected ahead, stopping.");
             command_publisher->publish(geometry_msgs::msg::Twist());
             return;
         }
+        is_currently_blocked = false;
 
         // Get the error of look ahead pose and robot pose
         tf2::Transform robot_tf, look_ahead_pose_tf, look_ahead_pose_robot_tf;

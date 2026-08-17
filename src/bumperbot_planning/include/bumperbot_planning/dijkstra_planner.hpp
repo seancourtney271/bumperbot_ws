@@ -73,6 +73,16 @@ namespace bumperbot_planning
             nav2_util::LifecycleNode::SharedPtr node_;
             nav2_costmap_2d::Costmap2D * costmap_;
             std::string global_frame_, name_;
+            // Multiplies each cell's inflation cost before adding it into the path's
+            // total cost. At 1.0 (the old implicit behavior) a moderately-inflated
+            // cell near an edge is cheap enough that the shortest route past it beats
+            // a longer detour through open space, so the planner hugs boundaries
+            // whenever that's the shortest path. Raising this makes proximity to any
+            // obstacle/edge cost much more, so Dijkstra prefers standing off from
+            // edges whenever there's room to -- it does not change which cells are
+            // passable at all (that's still the separate cost < 99 threshold), so
+            // genuinely narrow corridors remain traversable.
+            double cost_penalty_weight_;
 
             // Map recieved
             void mapCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr map);

@@ -1,5 +1,6 @@
 #include "bumperbot_planning/dijkstra_planner.hpp"
 #include "rmw/qos_profiles.h"
+#include "nav2_util/node_utils.hpp"
 #include <queue>
 
 namespace bumperbot_planning
@@ -15,6 +16,10 @@ namespace bumperbot_planning
         tf_ = tf;
         costmap_ = costmap_ros->getCostmap();
         global_frame_ = costmap_ros->getGlobalFrameID();
+
+        nav2_util::declare_parameter_if_not_declared(
+            node_, name_ + ".cost_penalty_weight", rclcpp::ParameterValue(5.0));
+        node_->get_parameter(name_ + ".cost_penalty_weight", cost_penalty_weight_);
     }
 
     void DijkstraPlanner::cleanup()
@@ -92,8 +97,11 @@ namespace bumperbot_planning
                 // Cells that are less than 99 and >= 0 for being ok cells
                 costmap_->getCost(new_node.x, new_node.y) < 99)
                 {
-                    // Calculate Node cost
-                    new_node.cost = active_node.cost + step_cost + costmap_->getCost(new_node.x, new_node.y);
+                    // Calculate Node cost. The inflation term is weighted so proximity
+                    // to an edge/obstacle costs much more than a step of raw distance,
+                    // making the search prefer standing off from boundaries whenever
+                    // there's room to, rather than always taking the shortest route.
+                    new_node.cost = active_node.cost + step_cost + cost_penalty_weight_ * costmap_->getCost(new_node.x, new_node.y);
                     // Assigned previous node
                     new_node.prev = std::make_shared<GraphNode>(active_node);
                     pending_nodes.push(new_node);

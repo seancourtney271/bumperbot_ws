@@ -59,6 +59,18 @@ namespace bumperbot_motion
             // Occupancy value (0-100 scale) at/above which a cell is treated as blocked.
             int occupied_threshold;
 
+            // How long the look-ahead point can stay blocked before giving up on the
+            // current path entirely, rather than sitting there re-checking the same
+            // blocked point forever. Guards against cases where the global plan legally
+            // hugs a boundary the local costmap's (independently recomputed, rolling
+            // window) view of the same spot disagrees with -- nothing will ever change
+            // there on its own, so waiting indefinitely just hangs the mission.
+            double stuck_timeout;
+            // Set the moment the look-ahead point first became blocked; used with
+            // stuck_timeout to measure how long the blockage has persisted.
+            rclcpp::Time blocked_start_time;
+            bool is_currently_blocked;
+
             void controlLoop();
 
             void pathCallback(const nav_msgs::msg::Path::SharedPtr path);

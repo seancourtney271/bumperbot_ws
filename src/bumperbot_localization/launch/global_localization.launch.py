@@ -71,7 +71,13 @@ def generate_launch_description():
         parameters=[
             {"node_names": lifecycle_nodes},
             {"use_sim_time": use_sim_time},
-            {"autostart": True}
+            {"autostart": True},
+            # Default bond_timeout (4s) is nowhere near enough on this Pi under load
+            # (camera/aruco/EKF/ros2_control all competing) -- map_server's own configure
+            # step has been observed timing out its lifecycle service response, leaving
+            # amcl never activated and "map" permanently absent from TF. Same reasoning
+            # as lifecycle_manager_navigation's bond_timeout in navigation.launch.py.
+            {"bond_timeout": 60.0},
         ],
     )
 

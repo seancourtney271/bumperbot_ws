@@ -28,7 +28,11 @@ class StationRecorder(Node):
         self.declare_parameter("map_name", "demo")
         self.declare_parameter("known_marker_ids", [0, 1])
         self.declare_parameter("standoff_distance", 0.5)
+        # Empty by default -- if set, this exact path is used for save_stations instead
+        # of deriving one from map_name.
+        self.declare_parameter("stations_path", "")
         self.map_name = self.get_parameter("map_name").value
+        self.stations_path_override = self.get_parameter("stations_path").value
         # Must match docking_controller's default -- the whole point of recording this
         # standoff point (instead of the marker's own pose) is so mission_commander sends
         # the robot to the same reachable spot docking_controller would otherwise compute
@@ -156,9 +160,13 @@ class StationRecorder(Node):
             response.message = "No stations recorded yet -- drive past each marker before saving."
             return response
 
-        maps_dir = os.path.join(self._source_maps_dir(), self.map_name)
-        os.makedirs(maps_dir, exist_ok=True)
-        stations_path = os.path.join(maps_dir, "stations.yaml")
+        if self.stations_path_override:
+            stations_path = self.stations_path_override
+            os.makedirs(os.path.dirname(stations_path), exist_ok=True)
+        else:
+            maps_dir = os.path.join(self._source_maps_dir(), self.map_name)
+            os.makedirs(maps_dir, exist_ok=True)
+            stations_path = os.path.join(maps_dir, "stations.yaml")
 
         with open(stations_path, "w") as f:
             yaml.safe_dump({"stations": self.stations}, f)

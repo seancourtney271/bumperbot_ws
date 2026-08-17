@@ -40,9 +40,6 @@ namespace bumperbot_motion
             // place instead of curvature-driving -- the curvature formula degenerates
             // for points far to the side or behind the robot.
             double heading_error_threshold;
-            // Once position is reached, how close (radians) the final heading must be
-            // to the goal pose's orientation before declaring the goal fully reached.
-            double goal_yaw_tolerance;
             // Rotation direction (+1/-1) committed to while rotating in place, or 0
             // when not currently rotating. Locked in once chosen and held until the
             // heading error shrinks below threshold, so noise near the +-pi wraparound

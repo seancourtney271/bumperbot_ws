@@ -226,19 +226,6 @@ namespace bumperbot_motion
             return;
         }
 
-        // Still approaching -- require a reasonably fresh sighting before continuing to
-        // drive, since this leg still relies on the marker to confirm the approach is
-        // still valid. (The final in-place alignment above intentionally skips this check:
-        // a webcam's narrow field of view very easily loses the marker mid-rotation, and
-        // requiring continued visibility there just left the robot frozen mid-turn instead
-        // of finishing the square-up -- it doesn't need a fresh sighting to complete a
-        // rotation toward a target it already locked in.)
-        if((get_clock()->now() - last_marker_seen_time_).seconds() > marker_timeout_)
-        {
-            command_publisher_->publish(geometry_msgs::msg::Twist());
-            return;
-        }
-
         tf2::Transform robot_tf, target_tf, target_robot_tf;
         tf2::fromMsg(robot_pose.pose, robot_tf);
         tf2::fromMsg(target_pose_.pose, target_tf);
@@ -251,20 +238,34 @@ namespace bumperbot_motion
         {
             // Target is well off to the side or behind the robot -- rotate in place toward
             // it first, locking the direction so noise near the +-pi boundary can't flip
-            // it back and forth (same fix pure_pursuit needed for the same reason).
+            // it back and forth (same fix pure_pursuit needed for the same reason). No
+            // freshness check here, same reasoning as the final alignment phase above:
+            // this rotation itself is very likely to point the narrow-FOV camera away from
+            // the marker mid-turn, and it doesn't need a fresh sighting to keep turning
+            // toward a target it already locked in -- requiring one here previously left
+            // the robot frozen mid-turn instead of ever finishing it and driving forward.
             if(locked_rotation_sign_ == 0)
             {
                 locked_rotation_sign_ = (heading_error > 0) ? 1 : -1;
             }
             cmd_vel.angular.z = locked_rotation_sign_ * maximum_angular_velocity_;
-        }
-        else
-        {
-            locked_rotation_sign_ = 0;
-            cmd_vel.linear.x = std::clamp(k_prop_linear_ * distance, 0.0, maximum_linear_velocity_);
-            cmd_vel.angular.z = std::clamp(k_prop_angular_ * heading_error, -maximum_angular_velocity_, maximum_angular_velocity_);
+            command_publisher_->publish(cmd_vel);
+            return;
         }
 
+        locked_rotation_sign_ = 0;
+
+        // Only the actual forward-driving leg requires a fresh sighting -- blindly
+        // advancing on a stale/possibly-wrong reading is the one part of this that could
+        // actually run the robot into something.
+        if((get_clock()->now() - last_marker_seen_time_).seconds() > marker_timeout_)
+        {
+            command_publisher_->publish(geometry_msgs::msg::Twist());
+            return;
+        }
+
+        cmd_vel.linear.x = std::clamp(k_prop_linear_ * distance, 0.0, maximum_linear_velocity_);
+        cmd_vel.angular.z = std::clamp(k_prop_angular_ * heading_error, -maximum_angular_velocity_, maximum_angular_velocity_);
         command_publisher_->publish(cmd_vel);
     }
 }

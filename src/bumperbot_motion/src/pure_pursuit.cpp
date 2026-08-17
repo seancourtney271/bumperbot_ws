@@ -24,7 +24,6 @@ namespace bumperbot_motion
         declare_parameter<std::string>("costmap_topic", "/local_costmap/costmap");
         declare_parameter<int>("occupied_threshold", 90);
         declare_parameter<double>("heading_error_threshold", 0.5);
-        declare_parameter<double>("goal_yaw_tolerance", 0.1);
 
         // Load parameter values after declaration so runtime overrides take effect.
         look_ahead_distance = get_parameter("look_ahead_distance").as_double();
@@ -34,7 +33,6 @@ namespace bumperbot_motion
         std::string costmap_topic = get_parameter("costmap_topic").as_string();
         occupied_threshold = get_parameter("occupied_threshold").as_int();
         heading_error_threshold = get_parameter("heading_error_threshold").as_double();
-        goal_yaw_tolerance = get_parameter("goal_yaw_tolerance").as_double();
 
         // Subscribe to the planned path. The callback saves the latest path for use by the control loop.
         path_subscriber = create_subscription<nav_msgs::msg::Path>(path_planner_node_name, 10, std::bind(&PurePursuit::pathCallback, this, std::placeholders::_1));
@@ -130,32 +128,18 @@ namespace bumperbot_motion
         // Did we reach the goal position?
         if(distance <= 0.1)
         {
-            // Position reached -- now check whether we're also facing the goal's
-            // desired heading before declaring the goal fully done. Without this,
-            // the robot just freezes at whatever heading it happened to arrive with.
-            double goal_yaw = tf2::getYaw(global_plan.poses.back().pose.orientation);
-            double robot_yaw = tf2::getYaw(robot_pose_stamped.pose.orientation);
-            double yaw_error = std::atan2(std::sin(goal_yaw - robot_yaw), std::cos(goal_yaw - robot_yaw));
-
-            if(std::abs(yaw_error) <= goal_yaw_tolerance)
-            {
-                RCLCPP_INFO(get_logger(), "Goal Reached!");
-                global_plan.poses.clear();
-                locked_rotation_sign = 0;
-                std_msgs::msg::Bool goal_reached_msg;
-                goal_reached_msg.data = true;
-                goal_reached_publisher_->publish(goal_reached_msg);
-                return;
-            }
-
-            if(locked_rotation_sign == 0)
-            {
-                locked_rotation_sign = (yaw_error > 0) ? 1 : -1;
-            }
-
-            geometry_msgs::msg::Twist cmd_vel;
-            cmd_vel.angular.z = locked_rotation_sign * maximum_angular_velocity;
-            command_publisher->publish(cmd_vel);
+            // Position alone is enough -- final heading is deliberately not checked
+            // here anymore. The only caller that cares about final orientation is the
+            // station-docking flow, and docking_controller already does its own
+            // careful, marker-based final alignment right after this; a fast blind
+            // rotate-to-match-saved-yaw here was pure redundant motion.
+            RCLCPP_INFO(get_logger(), "Goal Reached!");
+            global_plan.poses.clear();
+            locked_rotation_sign = 0;
+            std_msgs::msg::Bool goal_reached_msg;
+            goal_reached_msg.data = true;
+            goal_reached_publisher_->publish(goal_reached_msg);
+            command_publisher->publish(geometry_msgs::msg::Twist());
             return;
         }
 

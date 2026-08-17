@@ -75,13 +75,16 @@ def generate_launch_description():
             {"node_names": ["planner_server", "local_costmap/local_costmap"]},
             {"use_sim_time": use_sim_time},
             {"autostart": True},
-            # This Pi has repeatedly shown slow lifecycle service responses under
-            # startup CPU load (see slam_toolbox/map_server history). That got worse
-            # once usb_cam/aruco_node started running continuously alongside
-            # ros2_control/EKF -- even after scoping local_costmap down with
-            # rolling_window and dropping its update rate, the Pi is still overloaded
-            # enough overall to occasionally miss a 30s heartbeat window mid-session.
-            {"bond_timeout": 60.0},
+            # Raising this to 60s didn't actually fix the observed failure -- logs show
+            # the bond connecting, then being declared dead ~0.2-13s later, nowhere near
+            # 60s. That means bond_timeout governs the *initial connection* wait, not the
+            # ongoing heartbeat tolerance -- and the Pi (confirmed via `vcgencmd
+            # get_throttled` showing real undervoltage events) is too unreliable to
+            # sustain that heartbeat at all, causing a repeating false-positive
+            # connect-then-declared-dead loop that tears down navigation mid-mission.
+            # Disabling bond monitoring entirely (0.0) stops the self-inflicted resets;
+            # a real node crash would still be visible via its topics going silent.
+            {"bond_timeout": 0.0},
         ],
     )
 

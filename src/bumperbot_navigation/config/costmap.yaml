@@ -56,6 +56,11 @@ local_costmap:
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        inflation_radius: 0.2
+        # 1.5ft caution runway -- cost_scaling_factor (unchanged) still determines the
+        # decay rate, so the hard cost < 99 passable/impassable line Dijkstra uses
+        # stays where it was tuned for narrow corridors. This just extends how far out
+        # the graduated cost gradient reaches, giving cost_penalty_weight real room to
+        # bias the route away from edges well before it's forced to skim close.
+        inflation_radius: 0.4572
         # Same reasoning as the global costmap (planner_server.yaml) -- keep these in sync.
         cost_scaling_factor: 10.0

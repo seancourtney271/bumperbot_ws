@@ -23,7 +23,16 @@ namespace bumperbot_motion
         declare_parameter<std::string>("path_subscriber", path_planner_node_name);
 
         declare_parameter<std::string>("costmap_topic", "/local_costmap/costmap");
-        declare_parameter<int>("occupied_threshold", 90);
+        // 99 (not the stricter, more intuitive-looking ~50-90) deliberately only
+        // catches cost essentially at true lethal/obstacle. DijkstraPlanner's own
+        // cost < 99 raw-cost cutoff (see dijkstra_planner.cpp) already keeps a
+        // weighted-preferred margin from edges when planning the route; this check
+        // exists to catch a *new* obstacle the local costmap picked up since planning,
+        // not to re-litigate a clearance decision the planner already made with a
+        // different (translated 0-100 vs raw 0-255) cost scale. A stricter threshold
+        // here left only ~8cm of buffer between "Dijkstra approved this path" and
+        // "pure_pursuit panics," well within normal localization/costmap jitter.
+        declare_parameter<int>("occupied_threshold", 99);
         declare_parameter<double>("heading_error_threshold", 0.5);
         declare_parameter<double>("stuck_timeout", 5.0);
 

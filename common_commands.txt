@@ -55,7 +55,8 @@ Step 2a -- Make Save Folder
 mkdir -p ~/bumperbot_ws/src/bumperbot_mapping/maps/demo
 
 Step 2 — save the recorded station positions:
-ros2 service call /save_stations std_srvs/srv/Trigger map_name:=demo
+ros2 param set /station_recorder_node stations_path /home/seancour/bumperbot_ws/src/bumperbot_mapping/maps/demo/stations.yaml
+ros2 service call /save_stations std_srvs/srv/Trigger
 
 
 Step 3 — save the map itself, into the same install path stations.yaml just used:
@@ -63,6 +64,7 @@ ros2 service call /map_saver_server/save_map nav2_msgs/srv/SaveMap "{map_topic: 
 
 Step 3B - Build map
 colcon build --packages-select bumperbot_mapping
+source install/setup.bash 
 
 Step 4 — Ctrl+C, then bring up localization + the station-to-station demo:
 ros2 launch bumperbot_bringup real_robot.launch.py use_slam:=false map_name:=demo

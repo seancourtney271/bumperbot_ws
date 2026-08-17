@@ -15,7 +15,8 @@ namespace bumperbot_motion
         standoff_distance_(0.3), k_prop_linear_(1.0), k_prop_angular_(2.0),
         maximum_linear_velocity_(0.15), maximum_angular_velocity_(0.5),
         heading_error_threshold_(0.5), position_tolerance_(0.05), goal_yaw_tolerance_(0.1),
-        marker_timeout_(1.0), target_marker_id_(-1), locked_rotation_sign_(0),
+        marker_timeout_(1.0), search_angular_velocity_(0.15), search_timeout_(60.0),
+        target_marker_id_(-1), locked_rotation_sign_(0),
         has_target_pose_(false), docked_(false)
     {
         declare_parameter<double>("standoff_distance", standoff_distance_);
@@ -27,6 +28,8 @@ namespace bumperbot_motion
         declare_parameter<double>("position_tolerance", position_tolerance_);
         declare_parameter<double>("goal_yaw_tolerance", goal_yaw_tolerance_);
         declare_parameter<double>("marker_timeout", marker_timeout_);
+        declare_parameter<double>("search_angular_velocity", search_angular_velocity_);
+        declare_parameter<double>("search_timeout", search_timeout_);
         declare_parameter<int64_t>("target_marker_id", target_marker_id_);
 
         standoff_distance_ = get_parameter("standoff_distance").as_double();
@@ -38,6 +41,8 @@ namespace bumperbot_motion
         position_tolerance_ = get_parameter("position_tolerance").as_double();
         goal_yaw_tolerance_ = get_parameter("goal_yaw_tolerance").as_double();
         marker_timeout_ = get_parameter("marker_timeout").as_double();
+        search_angular_velocity_ = get_parameter("search_angular_velocity").as_double();
+        search_timeout_ = get_parameter("search_timeout").as_double();
         target_marker_id_ = get_parameter("target_marker_id").as_int();
 
         marker_subscriber_ = create_subscription<ros2_aruco_interfaces::msg::ArucoMarkers>(
@@ -56,6 +61,7 @@ namespace bumperbot_motion
         control_loop_ = create_wall_timer(std::chrono::milliseconds(100), std::bind(&DockingController::controlLoop, this));
 
         last_marker_seen_time_ = get_clock()->now();
+        search_start_time_ = get_clock()->now();
 
         RCLCPP_INFO(get_logger(), "Docking controller ready (target marker: %ld)", target_marker_id_);
     }
@@ -109,6 +115,12 @@ namespace bumperbot_motion
             target_q.setRPY(0, 0, yaw);
             target_pose_.pose.orientation = tf2::toMsg(target_q);
 
+            if(!has_target_pose_)
+            {
+                // Just found it after searching -- discard the search rotation's lock so
+                // the approach/alignment phases below pick their own direction fresh.
+                locked_rotation_sign_ = 0;
+            }
             has_target_pose_ = true;
             last_marker_seen_time_ = get_clock()->now();
             dock_pose_publisher_->publish(target_pose_);
@@ -126,6 +138,7 @@ namespace bumperbot_motion
             has_target_pose_ = false;
             docked_ = false;
             locked_rotation_sign_ = 0;
+            search_start_time_ = get_clock()->now();
         }
     }
 
@@ -138,8 +151,26 @@ namespace bumperbot_motion
 
         if(!has_target_pose_)
         {
-            // Never seen the target marker at all yet -- nothing to do.
-            command_publisher_->publish(geometry_msgs::msg::Twist());
+            // Never seen the target marker yet -- sweep slowly in place to give the
+            // (low-framerate) camera a chance to actually catch it in a frame. Rotating
+            // at full speed can carry the marker across the camera's narrow field of view
+            // between frames without ever producing a detection while pointed at it.
+            if((get_clock()->now() - search_start_time_).seconds() > search_timeout_)
+            {
+                RCLCPP_WARN(get_logger(), "Gave up searching for marker %ld after %.0fs -- holding still.",
+                    target_marker_id_, search_timeout_);
+                command_publisher_->publish(geometry_msgs::msg::Twist());
+                return;
+            }
+
+            if(locked_rotation_sign_ == 0)
+            {
+                locked_rotation_sign_ = 1;
+            }
+
+            geometry_msgs::msg::Twist cmd_vel;
+            cmd_vel.angular.z = locked_rotation_sign_ * search_angular_velocity_;
+            command_publisher_->publish(cmd_vel);
             return;
         }
 

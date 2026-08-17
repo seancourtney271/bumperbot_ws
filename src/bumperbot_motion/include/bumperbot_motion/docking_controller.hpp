@@ -41,6 +41,14 @@ namespace bumperbot_motion
             double goal_yaw_tolerance_;
             // How long (seconds) a marker can go unseen before its dock pose is considered stale.
             double marker_timeout_;
+            // Rotation speed while searching for a marker that hasn't been spotted yet --
+            // deliberately much slower than maximum_angular_velocity_. The camera framerate
+            // is low (3 Hz), so sweeping at full speed can rotate right past a marker between
+            // frames without ever getting a detection while pointed at it.
+            double search_angular_velocity_;
+            // Give up searching (and just hold still) after sweeping for this long without
+            // ever finding the marker, rather than spinning forever.
+            double search_timeout_;
 
             // Which marker ID to dock to; negative means no active docking target.
             int64_t target_marker_id_;
@@ -52,6 +60,9 @@ namespace bumperbot_motion
             // Standoff pose to drive to, expressed in the odom frame.
             geometry_msgs::msg::PoseStamped target_pose_;
             rclcpp::Time last_marker_seen_time_;
+            // When the current search for target_marker_id_ started -- reset whenever the
+            // target changes. Used to enforce search_timeout_.
+            rclcpp::Time search_start_time_;
 
             void markerCallback(const ros2_aruco_interfaces::msg::ArucoMarkers::SharedPtr msg);
 

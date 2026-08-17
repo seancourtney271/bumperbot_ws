@@ -89,5 +89,13 @@ namespace bumperbot_motion
             // pose falls outside the costmap's bounds, rather than blocking the robot on
             // missing data.
             bool isPoseInCollision(const geometry_msgs::msg::PoseStamped & pose);
+
+            // Samples points along the straight line between "from" and "to" (both
+            // assumed to be in the same frame) and checks each against isPoseInCollision.
+            // Used to reject look-ahead candidates whose direct chord from the robot
+            // would cut across an edge/obstacle even though the point itself, and the
+            // actual (curved) path to reach it, are clear -- the classic pure-pursuit
+            // corner-cutting failure at sharp bends.
+            bool isSegmentInCollision(const geometry_msgs::msg::PoseStamped & from, const geometry_msgs::msg::PoseStamped & to);
     };
 }

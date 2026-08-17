@@ -253,11 +253,6 @@ namespace bumperbot_motion
 
     geometry_msgs::msg::PoseStamped PurePursuit::getLookAheadPose(const geometry_msgs::msg::PoseStamped & robot_pose)
     {
-        // Start with a fallback target: the last pose in the plan.
-        // This guarantees we always return a valid pose even if no lookahead point is found.
-        geometry_msgs::msg::PoseStamped look_ahead_pose = global_plan.poses.back();
-        look_ahead_pose.header = global_plan.header;
-
         // If the saved search index is outside the plan, reset it to the beginning.
         // This can happen when a new plan is received or the current index reached the end.
         if(current_plan_index >= global_plan.poses.size())
@@ -265,9 +260,20 @@ namespace bumperbot_motion
             current_plan_index = 0;
         }
 
+        // Fallback target: the closest still-on-path pose. Used if nothing farther
+        // along the path has a chord safe to drive straight at (see the loop below) --
+        // a safer default than the final goal pose, which could be on the far side of
+        // whatever's blocking the chord.
+        geometry_msgs::msg::PoseStamped look_ahead_pose = global_plan.poses[current_plan_index];
+        look_ahead_pose.header = global_plan.header;
+
         // Search forward from the current plan index for the next waypoint that is
-        // farther than the configured lookahead distance from the robot.
-        // This avoids selecting a target behind the robot or one it has already passed.
+        // farther than the configured lookahead distance from the robot, without ever
+        // accepting a candidate whose direct chord from the robot cuts across an
+        // edge/obstacle. Without this check, a point just past a sharp bend can already
+        // be farther than look_ahead_distance in a straight line even though the actual
+        // path swings wide to reach it -- picking it as the carrot makes pure pursuit
+        // clip the corner the plan was routed around.
         for(std::size_t i = current_plan_index; i < global_plan.poses.size(); ++i)
         {
             const auto & pose = global_plan.poses[i];
@@ -275,11 +281,20 @@ namespace bumperbot_motion
             double dy = pose.pose.position.y - robot_pose.pose.position.y;
             double distance = std::sqrt(dx * dx + dy * dy);
 
+            if(isSegmentInCollision(robot_pose, pose))
+            {
+                // Stop extending the carrot any farther -- keep whatever was accepted
+                // last (or the closest-pose fallback above, if nothing further along
+                // ever had a safe chord).
+                break;
+            }
+
+            look_ahead_pose = pose;
+            current_plan_index = i;
+
             if(distance > look_ahead_distance)
             {
                 // Found the next lookahead pose.
-                look_ahead_pose = pose;
-                current_plan_index = i;
                 break;
             }
         }
@@ -352,6 +367,34 @@ namespace bumperbot_motion
 
         int8_t occupancy = latest_costmap->data[grid_y * info.width + grid_x];
         return occupancy >= occupied_threshold;
+    }
+
+    bool PurePursuit::isSegmentInCollision(const geometry_msgs::msg::PoseStamped & from, const geometry_msgs::msg::PoseStamped & to)
+    {
+        double dx = to.pose.position.x - from.pose.position.x;
+        double dy = to.pose.position.y - from.pose.position.y;
+        double distance = std::sqrt(dx * dx + dy * dy);
+
+        // Sample roughly every costmap cell so no obstacle-sized gap can hide between
+        // samples. Falls back to a reasonable step if no costmap has arrived yet --
+        // isPoseInCollision itself will just report clear in that case anyway.
+        double step = latest_costmap ? latest_costmap->info.resolution : 0.05;
+        int num_samples = std::max(1, static_cast<int>(distance / step));
+
+        for(int i = 1; i <= num_samples; ++i)
+        {
+            double t = static_cast<double>(i) / num_samples;
+            geometry_msgs::msg::PoseStamped sample = to;
+            sample.pose.position.x = from.pose.position.x + t * dx;
+            sample.pose.position.y = from.pose.position.y + t * dy;
+
+            if(isPoseInCollision(sample))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 

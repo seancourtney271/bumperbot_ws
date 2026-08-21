@@ -10,6 +10,7 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     use_slam = LaunchConfiguration("use_slam")
     map_name = LaunchConfiguration("map_name")
+    use_docking = LaunchConfiguration("use_docking")
 
     use_slam_arg = DeclareLaunchArgument(
         "use_slam",
@@ -20,6 +21,14 @@ def generate_launch_description():
         "map_name",
         default_value="bedroom",
         description="Name of the saved map (folder under bumperbot_mapping/maps) to localize against when use_slam is false"
+    )
+
+    use_docking_arg = DeclareLaunchArgument(
+        "use_docking",
+        default_value="true",
+        description="Whether to run the camera/ArUco stack and docking_controller. Set "
+                     "false to skip the camera entirely and only navigate to each "
+                     "station's coarse waypoint, without the marker-based final approach."
     )
 
     hardware_interface = IncludeLaunchDescription(
@@ -77,6 +86,7 @@ def generate_launch_description():
             "launch",
             "camera.launch.py"
         ),
+        condition=IfCondition(use_docking),
     )
 
     global_localization = IncludeLaunchDescription(
@@ -103,7 +113,8 @@ def generate_launch_description():
         ),
         launch_arguments={
             "map_name": map_name,
-            "use_sim_time": "False"
+            "use_sim_time": "False",
+            "use_docking": use_docking
         }.items(),
         condition=UnlessCondition(use_slam)
     )
@@ -137,6 +148,7 @@ def generate_launch_description():
     return LaunchDescription([
         use_slam_arg,
         map_name_arg,
+        use_docking_arg,
         hardware_interface,
         laser_driver,
         controller,

@@ -3,6 +3,7 @@ from launch import LaunchDescription
 from ament_index_python.packages import get_package_share_directory
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 
 
@@ -11,10 +12,19 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
     planner_config = LaunchConfiguration("planner_config")
     map_name = LaunchConfiguration("map_name")
+    use_docking = LaunchConfiguration("use_docking")
 
     use_sim_time_arg = DeclareLaunchArgument(
         "use_sim_time",
         default_value="false"
+    )
+
+    use_docking_arg = DeclareLaunchArgument(
+        "use_docking",
+        default_value="true",
+        description="Whether to run docking_controller for camera/ArUco-based final "
+                     "approach. Set false to only navigate to each station's coarse "
+                     "waypoint and stop there -- for running without the camera stack."
     )
 
     map_name_arg = DeclareLaunchArgument(
@@ -126,6 +136,7 @@ def generate_launch_description():
         executable="docking_controller",
         name="docking_controller_node",
         output="screen",
+        condition=IfCondition(use_docking),
         parameters=[
             # 1 foot -- the final precision stop distance in front of the marker,
             # once mission_commander hands off from coarse navigation to docking.
@@ -139,6 +150,7 @@ def generate_launch_description():
         planner_config_arg,
         costmap_config_arg,
         map_name_arg,
+        use_docking_arg,
         planner_server,
         local_costmap_node,
         lifecycle_manager,

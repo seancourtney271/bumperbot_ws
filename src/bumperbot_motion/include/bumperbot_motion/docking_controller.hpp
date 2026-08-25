@@ -49,6 +49,14 @@ namespace bumperbot_motion
             // Give up searching (and just hold still) after sweeping for this long without
             // ever finding the marker, rather than spinning forever.
             double search_timeout_;
+            // Give up on the approach/alignment phase after this long (seconds) since the
+            // marker was first found, accepting wherever the robot currently is as "docked"
+            // rather than fighting forever to hit position_tolerance_/goal_yaw_tolerance_
+            // exactly. Without this, an approach that never quite settles (e.g. oscillating
+            // around goal_yaw_tolerance_) never sets docked_ true, which leaves the same
+            // marker "live" -- so driving past it again later re-triggers docking instead of
+            // it staying finished.
+            double docking_timeout_;
 
             // Which marker ID to dock to; negative means no active docking target.
             int64_t target_marker_id_;
@@ -63,6 +71,9 @@ namespace bumperbot_motion
             // When the current search for target_marker_id_ started -- reset whenever the
             // target changes. Used to enforce search_timeout_.
             rclcpp::Time search_start_time_;
+            // When the marker was first found (has_target_pose_ false -> true transition).
+            // Used to enforce docking_timeout_.
+            rclcpp::Time approach_start_time_;
 
             void markerCallback(const ros2_aruco_interfaces::msg::ArucoMarkers::SharedPtr msg);
 

@@ -16,6 +16,7 @@ namespace bumperbot_motion
         maximum_linear_velocity_(0.15), maximum_angular_velocity_(0.5),
         heading_error_threshold_(0.5), position_tolerance_(0.05), goal_yaw_tolerance_(0.1),
         marker_timeout_(1.0), search_angular_velocity_(0.15), search_timeout_(60.0),
+        docking_timeout_(20.0),
         target_marker_id_(-1), locked_rotation_sign_(0),
         has_target_pose_(false), docked_(false)
     {
@@ -30,6 +31,7 @@ namespace bumperbot_motion
         declare_parameter<double>("marker_timeout", marker_timeout_);
         declare_parameter<double>("search_angular_velocity", search_angular_velocity_);
         declare_parameter<double>("search_timeout", search_timeout_);
+        declare_parameter<double>("docking_timeout", docking_timeout_);
         declare_parameter<int64_t>("target_marker_id", target_marker_id_);
 
         standoff_distance_ = get_parameter("standoff_distance").as_double();
@@ -43,6 +45,7 @@ namespace bumperbot_motion
         marker_timeout_ = get_parameter("marker_timeout").as_double();
         search_angular_velocity_ = get_parameter("search_angular_velocity").as_double();
         search_timeout_ = get_parameter("search_timeout").as_double();
+        docking_timeout_ = get_parameter("docking_timeout").as_double();
         target_marker_id_ = get_parameter("target_marker_id").as_int();
 
         marker_subscriber_ = create_subscription<ros2_aruco_interfaces::msg::ArucoMarkers>(
@@ -118,8 +121,10 @@ namespace bumperbot_motion
             if(!has_target_pose_)
             {
                 // Just found it after searching -- discard the search rotation's lock so
-                // the approach/alignment phases below pick their own direction fresh.
+                // the approach/alignment phases below pick their own direction fresh, and
+                // start the docking_timeout_ clock for this approach attempt.
                 locked_rotation_sign_ = 0;
+                approach_start_time_ = get_clock()->now();
             }
             has_target_pose_ = true;
             last_marker_seen_time_ = get_clock()->now();
@@ -171,6 +176,26 @@ namespace bumperbot_motion
             geometry_msgs::msg::Twist cmd_vel;
             cmd_vel.angular.z = locked_rotation_sign_ * search_angular_velocity_;
             command_publisher_->publish(cmd_vel);
+            return;
+        }
+
+        if((get_clock()->now() - approach_start_time_).seconds() > docking_timeout_)
+        {
+            // Been trying to approach/align for too long without cleanly satisfying
+            // position_tolerance_ and goal_yaw_tolerance_ together -- accept wherever the
+            // robot currently is rather than fighting for a perfect fix forever. This also
+            // matters beyond just this one attempt: leaving docked_ false keeps this marker
+            // "live," so any later sighting of it (e.g. just driving past) would re-trigger
+            // docking instead of it staying finished.
+            RCLCPP_WARN(get_logger(), "Docking to marker %ld timed out after %.0fs -- accepting current position as docked.",
+                target_marker_id_, docking_timeout_);
+            docked_ = true;
+            locked_rotation_sign_ = 0;
+            command_publisher_->publish(geometry_msgs::msg::Twist());
+
+            std_msgs::msg::Bool docked_msg;
+            docked_msg.data = true;
+            docked_publisher_->publish(docked_msg);
             return;
         }
 
